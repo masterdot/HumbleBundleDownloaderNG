@@ -6,6 +6,7 @@ See CONCEPT.md section 6.
 from __future__ import annotations
 
 import hashlib
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -24,6 +25,24 @@ from hbdl.state import STATUS_FAILED, STATUS_VERIFIED, StateStore
 CHUNK_SIZE = 1024 * 1024  # 1 MiB
 MAX_ATTEMPTS = 5
 URL_STALE_AFTER = timedelta(minutes=10)
+BLOCK_STATUS_CODES = (403, 429)
+
+
+class CircuitBreaker:
+    """Aborts the rest of a run after repeated 403/429s (CONCEPT.md section 10):
+    better to fail loudly than keep hammering an account/IP that's being throttled."""
+
+    def __init__(self, threshold: int = 5):
+        self._threshold = threshold
+        self._count = 0
+        self._lock = threading.Lock()
+        self.tripped = threading.Event()
+
+    def record_block(self) -> None:
+        with self._lock:
+            self._count += 1
+            if self._count >= self._threshold:
+                self.tripped.set()
 
 
 @dataclass(slots=True)
@@ -37,6 +56,7 @@ class DownloadResult:
 @dataclass(slots=True)
 class DownloadReport:
     results: list[DownloadResult] = field(default_factory=list)
+    circuit_breaker_tripped: bool = False
 
     @property
     def succeeded(self) -> list[DownloadResult]:
@@ -72,6 +92,7 @@ def _download_one(
     dest_root: Path,
     store: StateStore,
     progress: ProgressReporter | None,
+    breaker: CircuitBreaker | None = None,
 ) -> DownloadResult:
     dest_path = item.dest_path(dest_root)
     part_path = dest_path.with_suffix(dest_path.suffix + ".part")
@@ -82,19 +103,32 @@ def _download_one(
             progress.advance(item.file_size)
         return DownloadResult(item=item, ok=True, skipped=True)
 
+    if breaker and breaker.tripped.is_set():
+        return DownloadResult(item=item, ok=False, error="uebersprungen: Circuit Breaker ausgeloest (zu viele 403/429)")
+
     current_item = item
     last_error: str | None = None
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
+        if breaker and breaker.tripped.is_set():
+            last_error = "Circuit Breaker ausgeloest waehrend Retry-Wartezeit"
+            break
         try:
             current_item = _fresh_url(client, current_item)
             existing = part_path.stat().st_size if part_path.exists() else 0
             headers = {"Range": f"bytes={existing}-"} if existing else {}
             with http.get(current_item.url, headers=headers, stream=True, timeout=60) as resp:
-                if resp.status_code == 403:
-                    # signature likely expired mid-run: force a refresh and retry once
-                    current_item = refresh_item_url(client, current_item)
-                    raise requests.HTTPError("expired signature (403), refreshed URL")
+                if resp.status_code in BLOCK_STATUS_CODES:
+                    if breaker:
+                        breaker.record_block()
+                    if resp.status_code == 403:
+                        # signature likely expired mid-run: force a refresh and retry once
+                        current_item = refresh_item_url(client, current_item)
+                    else:
+                        retry_after = resp.headers.get("Retry-After")
+                        if retry_after and retry_after.isdigit():
+                            time.sleep(min(int(retry_after), 60))
+                    raise requests.HTTPError(f"blocked (status={resp.status_code})")
                 if existing and resp.status_code != 206:
                     part_path.unlink(missing_ok=True)
                     existing = 0
@@ -154,15 +188,17 @@ def download_all(
     workers: int = 3,
     show_progress: bool = True,
     on_result: Callable[[DownloadResult], None] | None = None,
+    circuit_breaker_threshold: int = 5,
 ) -> DownloadReport:
     http = client.http_session
     total_bytes = sum(i.file_size for i in items)
     report = DownloadReport()
+    breaker = CircuitBreaker(threshold=circuit_breaker_threshold)
 
     progress_ctx = ProgressReporter(total_bytes, disable=not show_progress)
     with progress_ctx as progress, ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_download_one, client, http, item, dest_root, store, progress): item
+            pool.submit(_download_one, client, http, item, dest_root, store, progress, breaker): item
             for item in items
         }
         for future in as_completed(futures):
@@ -170,5 +206,50 @@ def download_all(
             report.results.append(result)
             if on_result:
                 on_result(result)
+
+    report.circuit_breaker_tripped = breaker.tripped.is_set()
+    return report
+
+
+def verify_only(items: list[DownloadItem], dest_root: Path, store: StateStore) -> DownloadReport:
+    """Re-hashes existing files against the manifest/API hash without any network
+    downloads (CONCEPT.md section 10, `--verify-only`). Files not yet present on
+    disk are reported as failed (nothing to verify), not silently skipped."""
+    report = DownloadReport()
+    for item in items:
+        dest_path = item.dest_path(dest_root)
+        hash_info = item.preferred_hash
+
+        if not dest_path.exists():
+            report.results.append(DownloadResult(item=item, ok=False, error="Datei fehlt auf der Platte"))
+            continue
+
+        if hash_info:
+            algo, expected = hash_info
+            actual = _hash_file(dest_path, algo)
+            if actual.lower() != expected.lower():
+                store.upsert(
+                    item.identity_key,
+                    status=STATUS_FAILED,
+                    dest_path=str(dest_path),
+                    last_attempt_at=datetime.now(timezone.utc).isoformat(),
+                    last_error=f"hash mismatch: expected {algo}={expected}, got {actual}",
+                )
+                report.results.append(
+                    DownloadResult(item=item, ok=False, error=f"Hash-Mismatch ({algo})")
+                )
+                continue
+
+        store.upsert(
+            item.identity_key,
+            status=STATUS_VERIFIED,
+            dest_path=str(dest_path),
+            file_size=item.file_size,
+            hash_algo=hash_info[0] if hash_info else None,
+            hash_value=hash_info[1] if hash_info else None,
+            last_attempt_at=datetime.now(timezone.utc).isoformat(),
+            last_error=None,
+        )
+        report.results.append(DownloadResult(item=item, ok=True))
 
     return report

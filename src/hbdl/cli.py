@@ -13,7 +13,7 @@ import typer
 from hbdl import auth, config
 from hbdl.api import Client
 from hbdl.catalog import build_catalog
-from hbdl.downloader.direct import download_all
+from hbdl.downloader.direct import download_all, verify_only
 from hbdl.state import open_store
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -97,6 +97,7 @@ def sync(
     strategy: str = typer.Option(config.DEFAULT_STRATEGY, help="direct (in M2 einzige Option; auto/torrent folgen in M4)."),
     platform: Optional[str] = typer.Option(None, help="Komma-getrennte Plattform-Filter, z.B. windows,ebook."),
     dry_run: bool = typer.Option(False, help="Nur planen/auflisten, nichts herunterladen."),
+    verify_only_flag: bool = typer.Option(False, "--verify-only", help="Bestehende Dateien gegen Manifest neu hashen, keine Downloads."),
 ) -> None:
     """Ermittelt die Bibliothek und laedt alle (gefilterten) Dateien herunter."""
     if strategy != "direct":
@@ -134,10 +135,25 @@ def sync(
 
     dest.mkdir(parents=True, exist_ok=True)
     with open_store() as store:
-        report = download_all(client, items, dest, store, workers=workers)
+        if verify_only_flag:
+            report = verify_only(items, dest, store)
+        else:
+            report = download_all(client, items, dest, store, workers=workers)
 
     typer.echo("")
-    typer.secho(f"{len(report.succeeded)} heruntergeladen, {len(report.skipped)} uebersprungen (bereits vorhanden).", fg=typer.colors.GREEN)
+    if verify_only_flag:
+        typer.secho(f"{len(report.succeeded)} verifiziert, {len(report.failed)} fehlgeschlagen/fehlend.", fg=typer.colors.GREEN)
+    else:
+        typer.secho(f"{len(report.succeeded)} heruntergeladen, {len(report.skipped)} uebersprungen (bereits vorhanden).", fg=typer.colors.GREEN)
+
+    if getattr(report, "circuit_breaker_tripped", False):
+        typer.secho(
+            "Circuit Breaker ausgeloest: zu viele 403/429-Antworten. Lauf abgebrochen -- "
+            "pruefe, ob der Cookie noch gueltig ist (`hbdl auth check`), bevor du erneut startest.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+
     if report.failed:
         typer.secho(f"{len(report.failed)} fehlgeschlagen:", fg=typer.colors.RED, err=True)
         for result in report.failed:

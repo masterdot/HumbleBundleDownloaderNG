@@ -14,10 +14,13 @@ Implemented:
 - **M2 — direct download queue**: `hbdl sync` downloads every file via
   resumable, hash-verified HTTP downloads, tracked in a local SQLite manifest
   so reruns skip already-verified files.
+- **M3 — robustness hardening**: a circuit breaker aborts the whole run after
+  repeated 403/429 responses instead of quietly hammering a throttled/expired
+  account, and `hbdl sync --verify-only` re-hashes already-downloaded files
+  against the manifest without any network downloads.
 
-Not yet implemented: TTL/circuit-breaker hardening beyond the basics
-(M3), BitTorrent support (M4) — `--strategy` currently only accepts
-`direct`. See CONCEPT.md for the full milestone list.
+Not yet implemented: BitTorrent support (M4) — `--strategy` currently only
+accepts `direct`. See CONCEPT.md for the full milestone list.
 
 ## Setup
 
@@ -72,6 +75,12 @@ filesystem alone). Filter by platform, or preview without writing anything:
 ```bash
 hbdl sync --platform windows,ebook
 hbdl sync --dry-run
+```
+
+Re-check integrity of what's already on disk without downloading anything:
+
+```bash
+hbdl sync --verify-only
 ```
 
 ## Development
