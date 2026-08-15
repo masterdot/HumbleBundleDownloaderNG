@@ -18,9 +18,15 @@ Implemented:
   repeated 403/429 responses instead of quietly hammering a throttled/expired
   account, and `hbdl sync --verify-only` re-hashes already-downloaded files
   against the manifest without any network downloads.
+- **M4 — BitTorrent v1**: `--strategy {auto,direct,torrent}`. `auto`/`torrent`
+  save the `.torrent` file next to where the download would go whenever one
+  is available (open it yourself in your torrent client of choice) and fall
+  back to a direct download otherwise; `direct` always ignores the torrent
+  option. Downloading the actual content via BitTorrent (client handoff or an
+  embedded engine) is intentionally out of scope for v1 — see CONCEPT.md
+  section 7 for the later, optional stages.
 
-Not yet implemented: BitTorrent support (M4) — `--strategy` currently only
-accepts `direct`. See CONCEPT.md for the full milestone list.
+All milestones from CONCEPT.md are now implemented.
 
 ## Setup
 
@@ -81,6 +87,15 @@ Re-check integrity of what's already on disk without downloading anything:
 
 ```bash
 hbdl sync --verify-only
+```
+
+Prefer BitTorrent where available (v1: saves the `.torrent` file for files
+that have one, downloads the rest directly), or force one mode explicitly:
+
+```bash
+hbdl sync --strategy auto      # default
+hbdl sync --strategy direct    # always HTTP, ignore torrent options
+hbdl sync --strategy torrent   # save .torrent where available, direct fallback otherwise
 ```
 
 ## Development

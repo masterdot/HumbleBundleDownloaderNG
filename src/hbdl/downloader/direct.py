@@ -6,7 +6,6 @@ See CONCEPT.md section 6.
 from __future__ import annotations
 
 import hashlib
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -18,6 +17,9 @@ import requests
 
 from hbdl.api import Client
 from hbdl.catalog import refresh_item_url
+from hbdl.downloader.common import BLOCK_STATUS_CODES, CircuitBreaker
+from hbdl.downloader.strategy import select_strategy
+from hbdl.downloader.torrent import download_torrent_file
 from hbdl.models import DownloadItem
 from hbdl.progress import ProgressReporter
 from hbdl.state import STATUS_FAILED, STATUS_VERIFIED, StateStore
@@ -25,24 +27,6 @@ from hbdl.state import STATUS_FAILED, STATUS_VERIFIED, StateStore
 CHUNK_SIZE = 1024 * 1024  # 1 MiB
 MAX_ATTEMPTS = 5
 URL_STALE_AFTER = timedelta(minutes=10)
-BLOCK_STATUS_CODES = (403, 429)
-
-
-class CircuitBreaker:
-    """Aborts the rest of a run after repeated 403/429s (CONCEPT.md section 10):
-    better to fail loudly than keep hammering an account/IP that's being throttled."""
-
-    def __init__(self, threshold: int = 5):
-        self._threshold = threshold
-        self._count = 0
-        self._lock = threading.Lock()
-        self.tripped = threading.Event()
-
-    def record_block(self) -> None:
-        with self._lock:
-            self._count += 1
-            if self._count >= self._threshold:
-                self.tripped.set()
 
 
 @dataclass(slots=True)
@@ -189,18 +173,33 @@ def download_all(
     show_progress: bool = True,
     on_result: Callable[[DownloadResult], None] | None = None,
     circuit_breaker_threshold: int = 5,
+    strategy: str = "direct",
 ) -> DownloadReport:
+    """Downloads `items`. Each item's strategy is resolved individually via
+    `select_strategy` (CONCEPT.md section 8) -- torrent items only fetch the
+    small .torrent file (v1, see downloader/torrent.py) and are excluded from
+    the byte-progress total, which tracks direct-download bytes only."""
     http = client.http_session
-    total_bytes = sum(i.file_size for i in items)
     report = DownloadReport()
     breaker = CircuitBreaker(threshold=circuit_breaker_threshold)
+
+    resolved = [(item, select_strategy(item, strategy)) for item in items]
+    direct_items = [item for item, kind in resolved if kind == "direct"]
+    torrent_items = [item for item, kind in resolved if kind == "torrent"]
+    total_bytes = sum(i.file_size for i in direct_items)
 
     progress_ctx = ProgressReporter(total_bytes, disable=not show_progress)
     with progress_ctx as progress, ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(_download_one, client, http, item, dest_root, store, progress, breaker): item
-            for item in items
+            for item in direct_items
         }
+        futures.update(
+            {
+                pool.submit(download_torrent_file, http, item, dest_root, store, breaker): item
+                for item in torrent_items
+            }
+        )
         for future in as_completed(futures):
             result = future.result()
             report.results.append(result)

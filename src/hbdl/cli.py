@@ -14,6 +14,7 @@ from hbdl import auth, config
 from hbdl.api import Client
 from hbdl.catalog import build_catalog
 from hbdl.downloader.direct import download_all, verify_only
+from hbdl.downloader.strategy import STRATEGIES
 from hbdl.state import open_store
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -94,19 +95,18 @@ def sync(
     cookie: Optional[str] = typer.Option(None, help="Roher _simpleauth_sess-Wert."),
     cookie_file: Optional[Path] = typer.Option(None, help="Netscape cookies.txt mit _simpleauth_sess."),
     workers: int = typer.Option(config.DEFAULT_WORKERS, help="Parallele Downloads/Order-Abfragen."),
-    strategy: str = typer.Option(config.DEFAULT_STRATEGY, help="direct (in M2 einzige Option; auto/torrent folgen in M4)."),
+    strategy: str = typer.Option(
+        config.DEFAULT_STRATEGY,
+        help="auto (Torrent wenn verfuegbar, sonst direct) | direct | torrent (v1: speichert nur die .torrent-Datei).",
+    ),
     platform: Optional[str] = typer.Option(None, help="Komma-getrennte Plattform-Filter, z.B. windows,ebook."),
     dry_run: bool = typer.Option(False, help="Nur planen/auflisten, nichts herunterladen."),
     verify_only_flag: bool = typer.Option(False, "--verify-only", help="Bestehende Dateien gegen Manifest neu hashen, keine Downloads."),
 ) -> None:
     """Ermittelt die Bibliothek und laedt alle (gefilterten) Dateien herunter."""
-    if strategy != "direct":
-        typer.secho(
-            f"Strategie '{strategy}' ist erst ab Meilenstein M4 verfuegbar; verwende 'direct'.",
-            fg=typer.colors.YELLOW,
-            err=True,
-        )
-        strategy = "direct"
+    if strategy not in STRATEGIES:
+        typer.secho(f"Unbekannte Strategie '{strategy}', erlaubt: {', '.join(STRATEGIES)}.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
 
     try:
         session = auth.resolve_session(cookie=cookie, cookie_file=cookie_file)
@@ -138,7 +138,7 @@ def sync(
         if verify_only_flag:
             report = verify_only(items, dest, store)
         else:
-            report = download_all(client, items, dest, store, workers=workers)
+            report = download_all(client, items, dest, store, workers=workers, strategy=strategy)
 
     typer.echo("")
     if verify_only_flag:
