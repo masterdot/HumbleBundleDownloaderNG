@@ -7,14 +7,17 @@ milestones). This README covers day-to-day usage of what's implemented so far.
 
 ## Status
 
-Implemented (Milestone M1 — auth & discovery, read-only):
+Implemented:
 
-- `hbdl auth login` — guided login
-- `hbdl auth check` — validates the current session
-- `hbdl list` — lists every file in your library without downloading anything
+- **M1 — auth & discovery** (read-only): `hbdl auth login`, `hbdl auth check`,
+  `hbdl list`.
+- **M2 — direct download queue**: `hbdl sync` downloads every file via
+  resumable, hash-verified HTTP downloads, tracked in a local SQLite manifest
+  so reruns skip already-verified files.
 
-Not yet implemented: actual downloading (`hbdl sync`), see CONCEPT.md milestones
-M2+.
+Not yet implemented: TTL/circuit-breaker hardening beyond the basics
+(M3), BitTorrent support (M4) — `--strategy` currently only accepts
+`direct`. See CONCEPT.md for the full milestone list.
 
 ## Setup
 
@@ -54,6 +57,21 @@ a cookie directly instead (see CONCEPT.md section 2 for the Netscape
 ```bash
 hbdl list --cookie-file cookies.txt
 hbdl list --cookie "$HBDL_COOKIE"
+```
+
+Download everything:
+
+```bash
+hbdl sync --dest ~/HumbleLibrary
+```
+
+Re-running `hbdl sync` is safe and cheap — already-downloaded, hash-verified
+files are skipped (tracked in a local SQLite manifest, not by trusting the
+filesystem alone). Filter by platform, or preview without writing anything:
+
+```bash
+hbdl sync --platform windows,ebook
+hbdl sync --dry-run
 ```
 
 ## Development

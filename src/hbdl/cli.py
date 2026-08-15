@@ -13,6 +13,8 @@ import typer
 from hbdl import auth, config
 from hbdl.api import Client
 from hbdl.catalog import build_catalog
+from hbdl.downloader.direct import download_all
+from hbdl.state import open_store
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 auth_app = typer.Typer(no_args_is_help=True, help="Login/Session verwalten")
@@ -84,6 +86,63 @@ def list_items(
         torrent_flag = "T" if item.torrent_url else " "
         typer.echo(f"[{torrent_flag}] {item.human_name} / {item.platform} / {item.filename} ({item.file_size} bytes)")
     typer.echo(f"\n{len(items)} Dateien gefunden.", err=True)
+
+
+@app.command("sync")
+def sync(
+    dest: Path = typer.Option(config.DEFAULT_DEST, help="Zielverzeichnis fuer heruntergeladene Dateien."),
+    cookie: Optional[str] = typer.Option(None, help="Roher _simpleauth_sess-Wert."),
+    cookie_file: Optional[Path] = typer.Option(None, help="Netscape cookies.txt mit _simpleauth_sess."),
+    workers: int = typer.Option(config.DEFAULT_WORKERS, help="Parallele Downloads/Order-Abfragen."),
+    strategy: str = typer.Option(config.DEFAULT_STRATEGY, help="direct (in M2 einzige Option; auto/torrent folgen in M4)."),
+    platform: Optional[str] = typer.Option(None, help="Komma-getrennte Plattform-Filter, z.B. windows,ebook."),
+    dry_run: bool = typer.Option(False, help="Nur planen/auflisten, nichts herunterladen."),
+) -> None:
+    """Ermittelt die Bibliothek und laedt alle (gefilterten) Dateien herunter."""
+    if strategy != "direct":
+        typer.secho(
+            f"Strategie '{strategy}' ist erst ab Meilenstein M4 verfuegbar; verwende 'direct'.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        strategy = "direct"
+
+    try:
+        session = auth.resolve_session(cookie=cookie, cookie_file=cookie_file)
+    except auth.AuthError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    client = Client(session)
+    items = build_catalog(client, workers=workers)
+
+    if platform:
+        wanted = {p.strip().lower() for p in platform.split(",")}
+        items = [i for i in items if i.platform.lower() in wanted]
+
+    if not items:
+        typer.echo("Keine Dateien zu verarbeiten (Bibliothek leer oder Filter zu eng).")
+        return
+
+    total_bytes = sum(i.file_size for i in items)
+    typer.echo(f"{len(items)} Dateien, {total_bytes / (1024**3):.2f} GiB gesamt.")
+
+    if dry_run:
+        for item in items:
+            typer.echo(f"  {item.human_name} / {item.platform} / {item.filename}")
+        return
+
+    dest.mkdir(parents=True, exist_ok=True)
+    with open_store() as store:
+        report = download_all(client, items, dest, store, workers=workers)
+
+    typer.echo("")
+    typer.secho(f"{len(report.succeeded)} heruntergeladen, {len(report.skipped)} uebersprungen (bereits vorhanden).", fg=typer.colors.GREEN)
+    if report.failed:
+        typer.secho(f"{len(report.failed)} fehlgeschlagen:", fg=typer.colors.RED, err=True)
+        for result in report.failed:
+            typer.secho(f"  {result.item.human_name}/{result.item.filename}: {result.error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
 
 
 def main() -> None:

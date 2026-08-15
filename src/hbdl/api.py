@@ -47,3 +47,8 @@ class Client:
     def order_detail(self, gamekey: str) -> dict:
         resp = self._get(f"/api/v1/order/{gamekey}")
         return resp.json()
+
+    @property
+    def http_session(self) -> requests.Session:
+        """The authenticated session, for streamed downloads outside this class."""
+        return self._http
