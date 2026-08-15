@@ -87,9 +87,19 @@ def _download_one(
     part_path = dest_path.with_suffix(dest_path.suffix + ".part")
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if store.is_verified(item.identity_key) and dest_path.exists() and dest_path.stat().st_size == item.file_size:
+    record = store.get(item.identity_key)
+    # Compare against the size recorded at actual download time, not the live
+    # item.file_size: the API's cached size can go stale (see comment below on
+    # Content-Length), which would otherwise make an already-good file look
+    # "changed" and get re-downloaded on every single run.
+    if (
+        record is not None
+        and record.status == STATUS_VERIFIED
+        and dest_path.exists()
+        and dest_path.stat().st_size == record.file_size
+    ):
         if progress:
-            progress.advance(item.file_size)
+            progress.advance(dest_path.stat().st_size)
         return DownloadResult(item=item, ok=True, skipped=True)
 
     if breaker and breaker.tripped.is_set():
@@ -122,6 +132,8 @@ def _download_one(
                     part_path.unlink(missing_ok=True)
                     existing = 0
                 resp.raise_for_status()
+                content_length = resp.headers.get("Content-Length")
+                expected_total = existing + int(content_length) if content_length and content_length.isdigit() else None
 
                 mode = "ab" if existing and resp.status_code == 206 else "wb"
                 with part_path.open(mode) as fh:
@@ -132,30 +144,36 @@ def _download_one(
                         if progress:
                             progress.advance(len(chunk))
 
+            actual_size = part_path.stat().st_size
+            # The API's cached file_size/hash can go stale when Humble Bundle
+            # replaces a file (patched game build, corrected ebook) without
+            # updating download_struct metadata -- confirmed via HEAD requests
+            # during testing (server Content-Length differed from the API's
+            # file_size for the same URL). The response's OWN Content-Length is
+            # the only authoritative signal that this specific transfer is
+            # complete; a mismatch against *that* means real truncation/corruption.
+            if expected_total is not None and actual_size != expected_total:
+                part_path.unlink(missing_ok=True)
+                raise ValueError(f"unvollstaendige Uebertragung: erwartet {expected_total} Bytes, erhalten {actual_size}")
+
             warning: str | None = None
             hash_info = current_item.preferred_hash
             if hash_info:
                 algo, expected = hash_info
                 actual = _hash_file(part_path, algo)
                 if actual.lower() != expected.lower():
-                    actual_size = part_path.stat().st_size
-                    if actual_size != item.file_size:
-                        # size is also off -> genuinely truncated/corrupted transfer, retry
-                        part_path.unlink(missing_ok=True)
-                        raise ValueError(f"hash mismatch: expected {algo}={expected}, got {actual}")
-                    # size matches but the API's stored hash doesn't: this happens for
-                    # older bundles whose game builds were patched after release without
-                    # Humble Bundle updating the checksum metadata. The transfer itself
-                    # completed correctly (full byte count), so keep the file instead of
-                    # discarding a good download and retrying into the same mismatch 5x.
-                    warning = f"Hash-Mismatch ({algo}), Datei aber vollstaendig (Groesse passt) -- behalten"
+                    # Transfer completed correctly per the server's own Content-Length
+                    # (checked above); the mismatch is against Humble's stale metadata,
+                    # not a corrupted download. Keep the file instead of discarding a
+                    # good transfer and retrying into the same mismatch every time.
+                    warning = f"Hash-Mismatch ({algo}) gegen ggf. veraltete API-Metadaten -- Datei vollstaendig uebertragen, behalten"
 
             part_path.replace(dest_path)
             store.upsert(
                 item.identity_key,
                 status=STATUS_VERIFIED,
                 dest_path=str(dest_path),
-                file_size=item.file_size,
+                file_size=actual_size,  # actual bytes on disk, not the possibly-stale item.file_size
                 hash_algo=hash_info[0] if hash_info else None,
                 hash_value=hash_info[1] if hash_info else None,
                 last_attempt_at=datetime.now(timezone.utc).isoformat(),
@@ -240,12 +258,12 @@ def verify_only(items: list[DownloadItem], dest_root: Path, store: StateStore) -
             report.results.append(DownloadResult(item=item, ok=False, error="Datei fehlt auf der Platte"))
             continue
 
+        actual_size = dest_path.stat().st_size
         warning: str | None = None
         if hash_info:
             algo, expected = hash_info
             actual = _hash_file(dest_path, algo)
             if actual.lower() != expected.lower():
-                actual_size = dest_path.stat().st_size
                 if actual_size != item.file_size:
                     store.upsert(
                         item.identity_key,
@@ -260,11 +278,14 @@ def verify_only(items: list[DownloadItem], dest_root: Path, store: StateStore) -
                     continue
                 warning = f"Hash-Mismatch ({algo}), Datei aber vollstaendig (Groesse passt)"
 
+        # Store the size actually on disk, not the possibly-stale item.file_size
+        # from the API -- see the comment in `_download_one` on why that field
+        # can go stale, and why comparing against it would break future skips.
         store.upsert(
             item.identity_key,
             status=STATUS_VERIFIED,
             dest_path=str(dest_path),
-            file_size=item.file_size,
+            file_size=actual_size,
             hash_algo=hash_info[0] if hash_info else None,
             hash_value=hash_info[1] if hash_info else None,
             last_attempt_at=datetime.now(timezone.utc).isoformat(),

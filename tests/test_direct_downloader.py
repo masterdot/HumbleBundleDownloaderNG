@@ -70,8 +70,17 @@ def test_download_all_skips_already_verified(tmp_path):
 
 
 @responses.activate
-def test_download_all_marks_failed_on_hash_mismatch_with_wrong_size(tmp_path):
-    responses.get("https://dl.humble.com/book.pdf", body=b"wrong content", status=200)
+def test_download_all_marks_failed_on_truncated_transfer(tmp_path):
+    # Server claims more bytes (Content-Length) than it actually sends -> a real
+    # truncated/interrupted transfer, which must still be treated as a hard
+    # failure and retried (unlike a hash-only mismatch against stale API metadata).
+    short_body = b"wrong content"
+    responses.get(
+        "https://dl.humble.com/book.pdf",
+        body=short_body,
+        status=200,
+        headers={"Content-Length": str(len(short_body) + 5000)},
+    )
 
     client = Client(Session(cookie_value="dummy"))
     store = StateStore(tmp_path / "state.sqlite")
@@ -84,6 +93,10 @@ def test_download_all_marks_failed_on_hash_mismatch_with_wrong_size(tmp_path):
     finally:
         direct_mod.MAX_ATTEMPTS = 5
 
+    # urllib3/requests itself detects the short read (IncompleteRead) while
+    # streaming, before our own Content-Length cross-check even runs -- that
+    # check remains as a defensive fallback for cases the transport layer
+    # doesn't catch on its own.
     assert len(report.failed) == 1
     assert store.get(item.identity_key).status == STATUS_FAILED
     assert not (tmp_path / "dest" / "Example Bundle" / "ebook" / "book.pdf").exists()
