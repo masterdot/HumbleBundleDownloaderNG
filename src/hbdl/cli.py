@@ -154,6 +154,11 @@ def sync(
             err=True,
         )
 
+    if report.warnings:
+        typer.secho(f"{len(report.warnings)} mit Warnung (Datei behalten):", fg=typer.colors.YELLOW, err=True)
+        for result in report.warnings:
+            typer.secho(f"  {result.item.human_name}/{result.item.filename}: {result.warning}", fg=typer.colors.YELLOW, err=True)
+
     if report.failed:
         typer.secho(f"{len(report.failed)} fehlgeschlagen:", fg=typer.colors.RED, err=True)
         for result in report.failed:

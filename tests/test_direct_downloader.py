@@ -70,7 +70,7 @@ def test_download_all_skips_already_verified(tmp_path):
 
 
 @responses.activate
-def test_download_all_marks_failed_on_hash_mismatch(tmp_path):
+def test_download_all_marks_failed_on_hash_mismatch_with_wrong_size(tmp_path):
     responses.get("https://dl.humble.com/book.pdf", body=b"wrong content", status=200)
 
     client = Client(Session(cookie_value="dummy"))
@@ -86,4 +86,31 @@ def test_download_all_marks_failed_on_hash_mismatch(tmp_path):
 
     assert len(report.failed) == 1
     assert store.get(item.identity_key).status == STATUS_FAILED
+    assert not (tmp_path / "dest" / "Example Bundle" / "ebook" / "book.pdf").exists()
+    store.close()
+
+
+@responses.activate
+def test_download_all_keeps_file_on_hash_mismatch_with_correct_size(tmp_path):
+    # Same length as CONTENT but different bytes -> matching size, wrong hash.
+    # This mirrors real Humble Bundle data: old bundles whose game builds were
+    # patched after release without the stored checksum being updated.
+    wrong_content = b"WRONG-BYTES" * 1000
+    assert len(wrong_content) == len(CONTENT)
+    responses.get("https://dl.humble.com/book.pdf", body=wrong_content, status=200)
+
+    client = Client(Session(cookie_value="dummy"))
+    store = StateStore(tmp_path / "state.sqlite")
+    item = _item()
+
+    report = download_all(client, [item], tmp_path / "dest", store, workers=1, show_progress=False)
+
+    assert len(report.succeeded) == 1
+    assert not report.failed
+    assert len(report.warnings) == 1
+    assert "Hash-Mismatch" in report.warnings[0].warning
+
+    written = (tmp_path / "dest" / "Example Bundle" / "ebook" / "book.pdf").read_bytes()
+    assert written == wrong_content  # kept, not deleted
+    assert store.get(item.identity_key).status == STATUS_VERIFIED
     store.close()

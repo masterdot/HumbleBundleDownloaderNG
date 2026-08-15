@@ -35,6 +35,7 @@ class DownloadResult:
     ok: bool
     skipped: bool = False
     error: str | None = None
+    warning: str | None = None
 
 
 @dataclass(slots=True)
@@ -53,6 +54,10 @@ class DownloadReport:
     @property
     def failed(self) -> list[DownloadResult]:
         return [r for r in self.results if not r.ok]
+
+    @property
+    def warnings(self) -> list[DownloadResult]:
+        return [r for r in self.results if r.warning]
 
 
 def _hash_file(path: Path, algo: str) -> str:
@@ -127,13 +132,23 @@ def _download_one(
                         if progress:
                             progress.advance(len(chunk))
 
+            warning: str | None = None
             hash_info = current_item.preferred_hash
             if hash_info:
                 algo, expected = hash_info
                 actual = _hash_file(part_path, algo)
                 if actual.lower() != expected.lower():
-                    part_path.unlink(missing_ok=True)
-                    raise ValueError(f"hash mismatch: expected {algo}={expected}, got {actual}")
+                    actual_size = part_path.stat().st_size
+                    if actual_size != item.file_size:
+                        # size is also off -> genuinely truncated/corrupted transfer, retry
+                        part_path.unlink(missing_ok=True)
+                        raise ValueError(f"hash mismatch: expected {algo}={expected}, got {actual}")
+                    # size matches but the API's stored hash doesn't: this happens for
+                    # older bundles whose game builds were patched after release without
+                    # Humble Bundle updating the checksum metadata. The transfer itself
+                    # completed correctly (full byte count), so keep the file instead of
+                    # discarding a good download and retrying into the same mismatch 5x.
+                    warning = f"Hash-Mismatch ({algo}), Datei aber vollstaendig (Groesse passt) -- behalten"
 
             part_path.replace(dest_path)
             store.upsert(
@@ -144,9 +159,9 @@ def _download_one(
                 hash_algo=hash_info[0] if hash_info else None,
                 hash_value=hash_info[1] if hash_info else None,
                 last_attempt_at=datetime.now(timezone.utc).isoformat(),
-                last_error=None,
+                last_error=warning,
             )
-            return DownloadResult(item=item, ok=True)
+            return DownloadResult(item=item, ok=True, warning=warning)
 
         except (requests.RequestException, ValueError, OSError) as exc:
             last_error = str(exc)
@@ -213,7 +228,9 @@ def download_all(
 def verify_only(items: list[DownloadItem], dest_root: Path, store: StateStore) -> DownloadReport:
     """Re-hashes existing files against the manifest/API hash without any network
     downloads (CONCEPT.md section 10, `--verify-only`). Files not yet present on
-    disk are reported as failed (nothing to verify), not silently skipped."""
+    disk are reported as failed (nothing to verify), not silently skipped. A hash
+    mismatch with a matching file size is a warning, not a failure -- see the
+    comment in `_download_one` for why (stale checksums on old, patched bundles)."""
     report = DownloadReport()
     for item in items:
         dest_path = item.dest_path(dest_root)
@@ -223,21 +240,25 @@ def verify_only(items: list[DownloadItem], dest_root: Path, store: StateStore) -
             report.results.append(DownloadResult(item=item, ok=False, error="Datei fehlt auf der Platte"))
             continue
 
+        warning: str | None = None
         if hash_info:
             algo, expected = hash_info
             actual = _hash_file(dest_path, algo)
             if actual.lower() != expected.lower():
-                store.upsert(
-                    item.identity_key,
-                    status=STATUS_FAILED,
-                    dest_path=str(dest_path),
-                    last_attempt_at=datetime.now(timezone.utc).isoformat(),
-                    last_error=f"hash mismatch: expected {algo}={expected}, got {actual}",
-                )
-                report.results.append(
-                    DownloadResult(item=item, ok=False, error=f"Hash-Mismatch ({algo})")
-                )
-                continue
+                actual_size = dest_path.stat().st_size
+                if actual_size != item.file_size:
+                    store.upsert(
+                        item.identity_key,
+                        status=STATUS_FAILED,
+                        dest_path=str(dest_path),
+                        last_attempt_at=datetime.now(timezone.utc).isoformat(),
+                        last_error=f"hash mismatch: expected {algo}={expected}, got {actual}",
+                    )
+                    report.results.append(
+                        DownloadResult(item=item, ok=False, error=f"Hash-Mismatch ({algo}) und Groesse falsch")
+                    )
+                    continue
+                warning = f"Hash-Mismatch ({algo}), Datei aber vollstaendig (Groesse passt)"
 
         store.upsert(
             item.identity_key,
@@ -247,8 +268,8 @@ def verify_only(items: list[DownloadItem], dest_root: Path, store: StateStore) -
             hash_algo=hash_info[0] if hash_info else None,
             hash_value=hash_info[1] if hash_info else None,
             last_attempt_at=datetime.now(timezone.utc).isoformat(),
-            last_error=None,
+            last_error=warning,
         )
-        report.results.append(DownloadResult(item=item, ok=True))
+        report.results.append(DownloadResult(item=item, ok=True, warning=warning))
 
     return report

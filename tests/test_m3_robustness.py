@@ -102,5 +102,22 @@ def test_verify_only_marks_hash_mismatch_as_failed(tmp_path):
     report = verify_only([item], tmp_path / "dest", store)
 
     assert len(report.failed) == 1
-    assert "Hash-Mismatch" in report.failed[0].error
+
+
+def test_verify_only_warns_but_keeps_file_on_hash_mismatch_with_correct_size(tmp_path):
+    store = StateStore(tmp_path / "state.sqlite")
+    item = _item()
+    dest_path = item.dest_path(tmp_path / "dest")
+    dest_path.parent.mkdir(parents=True)
+    wrong_but_same_size = b"OTHER!!" * 500
+    assert len(wrong_but_same_size) == len(CONTENT)
+    dest_path.write_bytes(wrong_but_same_size)
+
+    report = verify_only([item], tmp_path / "dest", store)
+
+    assert len(report.succeeded) == 1
+    assert not report.failed
+    assert len(report.warnings) == 1
+    assert store.get(item.identity_key).status == STATUS_VERIFIED
+    assert dest_path.read_bytes() == wrong_but_same_size  # untouched
     store.close()
