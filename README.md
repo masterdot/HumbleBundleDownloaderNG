@@ -3,7 +3,18 @@
 A new version of a humblebundle batch downloader.
 
 See [CONCEPT.md](CONCEPT.md) for the full design (architecture, data model,
-milestones). This README covers day-to-day usage of what's implemented so far.
+milestones) and [CHANGELOG.md](CHANGELOG.md) for what's been built and fixed
+so far. This README covers day-to-day usage of what's implemented.
+
+## Related projects
+
+This is an independent implementation, not a fork, but builds on ideas from
+earlier Humble Bundle downloaders in the same space:
+
+- [jimmckeeth/HumbleBundleDownloader](https://github.com/jimmckeeth/HumbleBundleDownloader) —
+  the original project in this line of tools.
+- [Don-Swanson/HumbleBundleDownloader](https://github.com/Don-Swanson/HumbleBundleDownloader) —
+  its successor.
 
 ## Status
 
@@ -26,7 +37,10 @@ Implemented:
   embedded engine) is intentionally out of scope for v1 — see CONCEPT.md
   section 7 for the later, optional stages.
 
-All milestones from CONCEPT.md are now implemented.
+All milestones from CONCEPT.md are now implemented and have been exercised
+against a real account (92 orders, ~2700 files). That run surfaced and fixed
+two real bugs around stale API metadata on older bundles — see
+[CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Setup
 
@@ -106,3 +120,7 @@ hbdl sync --strategy torrent   # save .torrent where available, direct fallback 
 
 Tests run entirely offline against recorded/sanitized fixture JSON in
 `tests/fixtures/` — no live Humble Bundle account is required.
+
+## License
+
+[MIT](LICENSE).
