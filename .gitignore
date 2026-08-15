@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.DS_Store
+
+# hbdl runtime data (config/session/state live under the OS config dir, not
+# the repo, but keep these ignored in case someone points --dest here)
+/HumbleLibrary/
+*.sqlite
+session.json

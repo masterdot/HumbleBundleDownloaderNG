@@ -1,0 +1,40 @@
+{
+  "gamekey": "abc123",
+  "product": {"human_name": "Example Bundle 1"},
+  "subproducts": [
+    {
+      "human_name": "Example Game",
+      "downloads": [
+        {
+          "platform": "windows",
+          "download_struct": [
+            {
+              "name": "Installer",
+              "url": {
+                "web": "https://dl.humble.com/examplegame-installer.exe?gamekey=abc123&ttl=1234",
+                "bittorrent": "https://dl.humble.com/torrents/examplegame-installer.exe.torrent?gamekey=abc123"
+              },
+              "file_size": 104857600,
+              "md5": "d41d8cd98f00b204e9800998ecf8427e",
+              "sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+            }
+          ]
+        },
+        {
+          "platform": "ebook",
+          "download_struct": [
+            {
+              "name": "PDF",
+              "url": {
+                "web": "https://dl.humble.com/examplebook.pdf?gamekey=abc123&ttl=1234"
+              },
+              "file_size": 5242880,
+              "md5": "0cc175b9c0f1b6a831c399e269772661",
+              "sha1": "356a192b7913b04c54574d18c28d46e6395428ab"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
