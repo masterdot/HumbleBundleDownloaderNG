@@ -621,3 +621,52 @@ Calibre-Web, Jellyfin, still-open games solution).
   currently hardcodes `"de"`/`"en"` — it would need extending for more than
   two languages), and add the new option to the DE/EN switch UI (topbar
   form, settings `<select>`).
+
+### 2026-08-19 – VNC clipboard: the actual root cause found (`window.UI` was never real)
+
+- **Symptom after the same-origin proxy fix**: the browser's context menu
+  worked again inside the VNC window, but Cmd/Ctrl+V still pasted a stale
+  value (an old, already-expired OTP) instead of the current clipboard
+  content — with no permission prompt and no console error at all, even
+  after adding a `console.warn` to the `catch` branch.
+- **Root cause, found by reading `/usr/share/novnc/hbdl-vnc.html` and
+  `app/ui.js` inside the running container**: stock noVNC's `UI` object is
+  only ever `export default UI` from `app/ui.js`, imported into the
+  *module scope* of the inline `<script type="module">` in `vnc.html`. It
+  was never actually assigned to `window.UI` — every version of
+  `novnc-clipboard-autopaste.js` so far (including the one from the
+  same-origin fix) started with `if (!window.UI || !window.UI.rfb)
+  return;`, which was silently true on every single keypress. None of the
+  clipboard logic ever ran; the keydown just fell through unmodified to
+  noVNC's own default canvas handler, which forwarded a bare Ctrl+V to the
+  remote X11 session — explaining the stale value (whatever was last in
+  the *remote* clipboard/selection buffer) and the complete absence of any
+  error (the code path was never reached at all).
+- **Diagnosis approach, at the user's suggestion**: instead of guessing at
+  another clipboard-permission fix, split the problem into two
+  independently-testable halves. Investigated noVNC's own already-built-in
+  clipboard mechanism first (`UI.openClipboardPanel()` reveals a sidebar
+  with `#noVNC_clipboard_text`, whose native `change` event calls
+  `UI.clipboardSend()`, which reads the textarea and calls
+  `UI.rfb.clipboardPasteFrom()`). A temporary diagnostic build added a
+  visible "Sync clipboard" button driving that exact path plus verbose
+  console logging, with the automatic Cmd/Ctrl+V interception removed
+  entirely so a plain Ctrl+V would behave like stock noVNC. The button
+  surfaced a real clipboard-permission prompt for the first time — which
+  is what led to finding the `window.UI` gap, since the button's own guard
+  clause was hit and logged clearly.
+- **Fix**: `docker/Dockerfile`'s existing `sed` patch step (which clones
+  `vnc.html` to `hbdl-vnc.html`) gained one more substitution: `import UI
+  from "./app/ui.js";` → `import UI from "./app/ui.js"; window.UI = UI;`.
+  That's the entire fix — `UI` is now genuinely global, and every
+  `window.UI`-gated check that already existed in the JS actually runs.
+- **`novnc-clipboard-autopaste.js` restored to one shortcut**: with
+  `window.UI` real, the automatic Cmd/Ctrl+V interception was wired back
+  up (`readText()` → sync into `#noVNC_clipboard_text` → `UI.clipboardSend()`
+  → simulated remote Ctrl+V), confirmed end-to-end by the user. The manual
+  "Sync clipboard" button stays as a visible fallback for the case where
+  the browser hasn't granted (or has denied) the clipboard-read permission
+  yet.
+- **Confirmed working end-to-end by the user** in a real browser: a single
+  Cmd/Ctrl+V in the embedded login window now pastes the current host
+  clipboard content.

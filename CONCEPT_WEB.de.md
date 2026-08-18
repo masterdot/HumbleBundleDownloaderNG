@@ -552,3 +552,55 @@ Spiele-Loesung).
   Vollstaendigkeits-Test greift nur `"de"`/`"en"` fest ab -- bei mehr als zwei
   Sprachen muesste er entsprechend erweitert werden), sowie das
   DE/EN-Umschalt-UI (Topbar-Formular, Settings-`<select>`) um die neue Option.
+
+### 2026-08-19 – VNC-Clipboard: die eigentliche Root Cause gefunden (`window.UI` existierte nie wirklich)
+
+- **Symptom nach dem Same-Origin-Proxy-Fix**: das Kontextmenue im VNC-Fenster
+  funktionierte wieder, aber Cmd/Strg+V fuegte weiterhin einen alten Wert ein
+  (einen bereits abgelaufenen OTP-Code) statt des aktuellen
+  Zwischenablage-Inhalts -- ohne jeden Berechtigungs-Dialog und ohne
+  Konsolenfehler, selbst nachdem ein `console.warn` im `catch`-Block
+  ergaenzt worden war.
+- **Root Cause**, gefunden durch Lesen von `/usr/share/novnc/hbdl-vnc.html`
+  und `app/ui.js` im laufenden Container: das `UI`-Objekt von noVNC ist nur
+  `export default UI` aus `app/ui.js`, importiert in den *Modul-Scope* des
+  inline `<script type="module">` in `vnc.html`. Es wurde nie tatsaechlich
+  `window.UI` zugewiesen -- jede bisherige Version von
+  `novnc-clipboard-autopaste.js` (inklusive der aus dem Same-Origin-Fix)
+  begann mit `if (!window.UI || !window.UI.rfb) return;`, was bei jedem
+  einzelnen Tastendruck lautlos zutraf. Keine der Clipboard-Logiken lief je,
+  der Keydown fiel unveraendert durch zu noVNCs eigenem Standard-Canvas-Handler,
+  der ein rohes Strg+V an die Remote-X11-Session weiterreichte -- das erklaert
+  sowohl den alten Wert (was auch immer zuletzt in der *Remote*-Zwischenablage
+  stand) als auch das komplette Fehlen jeglicher Fehlermeldung (der Code-Pfad
+  wurde nie erreicht).
+- **Diagnose-Ansatz, auf Vorschlag des Nutzers**: statt eines weiteren
+  Rate-Versuchs an der Clipboard-Berechtigung wurde das Problem in zwei
+  unabhaengig testbare Haelften zerlegt. Zuerst noVNCs eigenen, bereits
+  fertigen Zwischenablage-Mechanismus untersucht (`UI.openClipboardPanel()`
+  oeffnet eine Sidebar mit `#noVNC_clipboard_text`, dessen natives
+  `change`-Event `UI.clipboardSend()` aufruft, das das Textfeld liest und
+  `UI.rfb.clipboardPasteFrom()` aufruft). Ein temporaerer Diagnose-Build
+  fuegte einen sichtbaren "Zwischenablage synchronisieren"-Button hinzu, der
+  genau diesen Pfad ansteuert plus ausfuehrliches Konsolen-Logging, wobei die
+  automatische Cmd/Strg+V-Abfangung komplett entfernt wurde, damit ein
+  normaler Strg+V sich wie Standard-noVNC verhaelt. Der Button zeigte zum
+  ersten Mal einen echten Zwischenablage-Berechtigungs-Dialog -- was zur
+  Entdeckung der `window.UI`-Luecke fuehrte, da die Guard-Klausel des Buttons
+  getroffen und klar geloggt wurde.
+- **Fix**: der bestehende `sed`-Patch-Schritt in `docker/Dockerfile` (der
+  `vnc.html` zu `hbdl-vnc.html` klont) bekam eine weitere Ersetzung: `import
+  UI from "./app/ui.js";` -> `import UI from "./app/ui.js"; window.UI = UI;`.
+  Das ist der gesamte Fix -- `UI` ist jetzt wirklich global, und jede bereits
+  vorhandene `window.UI`-Pruefung im JS laeuft tatsaechlich.
+- **`novnc-clipboard-autopaste.js` wieder auf einen einzigen Tastendruck
+  zurueckgebaut**: mit echtem `window.UI` wurde die automatische
+  Cmd/Strg+V-Abfangung wieder eingebaut (`readText()` -> Sync in
+  `#noVNC_clipboard_text` -> `UI.clipboardSend()` -> simuliertes Remote-
+  Strg+V), vom Nutzer end-to-end bestaetigt. Der manuelle "Zwischenablage
+  synchronisieren"-Button bleibt als sichtbarer Fallback fuer den Fall, dass
+  der Browser die Clipboard-Read-Berechtigung noch nicht erteilt (oder
+  verweigert) hat.
+- **Vom Nutzer end-to-end in einem echten Browser bestaetigt**: ein
+  einzelnes Cmd/Strg+V im eingebetteten Login-Fenster fuegt jetzt den
+  aktuellen Host-Zwischenablage-Inhalt ein.

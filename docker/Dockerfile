@@ -45,6 +45,7 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/hbdl.conf
 # permissions. Settings' login iframe points at hbdl-vnc.html, not vnc.html.
 COPY docker/novnc-clipboard-autopaste.js /usr/share/novnc/hbdl-clipboard-autopaste.js
 RUN cp /usr/share/novnc/vnc.html /usr/share/novnc/hbdl-vnc.html \
+    && sed -i 's#import UI from "./app/ui.js";#import UI from "./app/ui.js"; window.UI = UI;#' /usr/share/novnc/hbdl-vnc.html \
     && sed -i 's#</body>#<script src="hbdl-clipboard-autopaste.js"></script></body>#' /usr/share/novnc/hbdl-vnc.html
 
 ENV DISPLAY=:99
