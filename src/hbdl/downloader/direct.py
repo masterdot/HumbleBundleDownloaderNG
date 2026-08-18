@@ -6,8 +6,10 @@ See CONCEPT.md section 6.
 from __future__ import annotations
 
 import hashlib
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,8 +23,8 @@ from hbdl.downloader.common import BLOCK_STATUS_CODES, CircuitBreaker
 from hbdl.downloader.strategy import select_strategy
 from hbdl.downloader.torrent import download_torrent_file
 from hbdl.models import DownloadItem
-from hbdl.progress import ProgressReporter
-from hbdl.state import STATUS_FAILED, STATUS_VERIFIED, StateStore
+from hbdl.progress import ProgressReporter, ProgressSink
+from hbdl.state import STATUS_DOWNLOADING, STATUS_FAILED, STATUS_VERIFIED, StateStore
 
 CHUNK_SIZE = 1024 * 1024  # 1 MiB
 MAX_ATTEMPTS = 5
@@ -104,6 +106,17 @@ def _download_one(
 
     if breaker and breaker.tripped.is_set():
         return DownloadResult(item=item, ok=False, error="uebersprungen: Circuit Breaker ausgeloest (zu viele 403/429)")
+
+    # Purely informational for the web UI (M12, CONCEPT_WEB.md) -- lets it show
+    # "currently downloading X" via a plain query, no other control-flow
+    # depends on this row existing. Superseded by the VERIFIED/FAILED upsert
+    # below once this attempt concludes either way.
+    store.upsert(
+        item.identity_key,
+        status=STATUS_DOWNLOADING,
+        dest_path=str(dest_path),
+        last_attempt_at=datetime.now(timezone.utc).isoformat(),
+    )
 
     current_item = item
     last_error: str | None = None
@@ -207,37 +220,76 @@ def download_all(
     on_result: Callable[[DownloadResult], None] | None = None,
     circuit_breaker_threshold: int = 5,
     strategy: str = "direct",
+    pause_gate: threading.Event | None = None,
+    stop_event: threading.Event | None = None,
+    progress_factory: Callable[[int], ProgressSink] | None = None,
 ) -> DownloadReport:
     """Downloads `items`. Each item's strategy is resolved individually via
     `select_strategy` (CONCEPT.md section 8) -- torrent items only fetch the
     small .torrent file (v1, see downloader/torrent.py) and are excluded from
-    the byte-progress total, which tracks direct-download bytes only."""
+    the byte-progress total, which tracks direct-download bytes only.
+
+    `pause_gate`/`stop_event` (both optional, default to "always go"/"never
+    stop" so the CLI's existing call site is unaffected) let a caller like the
+    web JobManager (see CONCEPT_WEB.md M11/M12) pause between files -- no new
+    submissions once `pause_gate` is cleared, already-in-flight downloads
+    finish normally -- or stop the run early -- no new submissions, but
+    in-flight downloads are still waited for and their results collected, not
+    abandoned. Submission is bounded/incremental (a queue, not "submit every
+    future up front") specifically so "stop submitting new work" is
+    expressible at all; the per-chunk byte-streaming loop inside
+    `_download_one` is untouched by this."""
+    if pause_gate is None:
+        pause_gate = threading.Event()
+        pause_gate.set()
+    if stop_event is None:
+        stop_event = threading.Event()
+
     http = client.http_session
     report = DownloadReport()
     breaker = CircuitBreaker(threshold=circuit_breaker_threshold)
 
     resolved = [(item, select_strategy(item, strategy)) for item in items]
     direct_items = [item for item, kind in resolved if kind == "direct"]
-    torrent_items = [item for item, kind in resolved if kind == "torrent"]
     total_bytes = sum(i.file_size for i in direct_items)
 
-    progress_ctx = ProgressReporter(total_bytes, disable=not show_progress)
+    progress_ctx = (
+        progress_factory(total_bytes)
+        if progress_factory is not None
+        else ProgressReporter(total_bytes, disable=not show_progress)
+    )
     with progress_ctx as progress, ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(_download_one, client, http, item, dest_root, store, progress, breaker): item
-            for item in direct_items
-        }
-        futures.update(
-            {
-                pool.submit(download_torrent_file, http, item, dest_root, store, breaker): item
-                for item in torrent_items
-            }
-        )
-        for future in as_completed(futures):
-            result = future.result()
-            report.results.append(result)
-            if on_result:
-                on_result(result)
+        pending = deque(resolved)
+        in_flight: dict[Future, DownloadItem] = {}
+
+        def submit_next() -> None:
+            item, kind = pending.popleft()
+            if kind == "direct":
+                future = pool.submit(_download_one, client, http, item, dest_root, store, progress, breaker)
+            else:
+                future = pool.submit(download_torrent_file, http, item, dest_root, store, breaker)
+            in_flight[future] = item
+
+        while pending or in_flight:
+            if stop_event.is_set():
+                pending.clear()  # no more new starts; still drain in_flight below
+            else:
+                while pending and len(in_flight) < workers and pause_gate.is_set():
+                    submit_next()
+
+            if not in_flight:
+                if not pending:
+                    break
+                pause_gate.wait(timeout=0.5)  # parked: paused with nothing running
+                continue
+
+            done, _ = wait(list(in_flight.keys()), timeout=0.5, return_when=FIRST_COMPLETED)
+            for future in done:
+                result = future.result()
+                report.results.append(result)
+                if on_result:
+                    on_result(result)
+                del in_flight[future]
 
     report.circuit_breaker_tripped = breaker.tripped.is_set()
     return report

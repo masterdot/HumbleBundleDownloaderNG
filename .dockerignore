@@ -1,0 +1,11 @@
+.git
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+tests
+CONCEPT.md
+CONCEPT_WEB.md
+CHANGELOG.md
+*.code-workspace
+.DS_Store

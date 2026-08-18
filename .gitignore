@@ -11,3 +11,8 @@ __pycache__/
 *.sqlite
 session.json
 HumbleBundleDownloaderNG.code-workspace
+
+# docker-compose.yml's local volume mounts (real session cookie, config.toml,
+# state db, Chromium/NSS profile data -- never belongs in the repo)
+/hbdl-config/
+/hbdl-data/

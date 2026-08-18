@@ -1,4 +1,6 @@
 import hashlib
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -8,7 +10,7 @@ from hbdl.api import Client
 from hbdl.auth import BASE_URL, Session
 from hbdl.downloader.direct import download_all
 from hbdl.models import DownloadItem
-from hbdl.state import STATUS_FAILED, STATUS_VERIFIED, StateStore
+from hbdl.state import STATUS_DOWNLOADING, STATUS_FAILED, STATUS_VERIFIED, StateStore
 
 CONTENT = b"hello world" * 1000
 SHA1 = hashlib.sha1(CONTENT).hexdigest()
@@ -125,5 +127,49 @@ def test_download_all_keeps_file_on_hash_mismatch_with_correct_size(tmp_path):
 
     written = (tmp_path / "dest" / "Example Bundle" / "ebook" / "book.pdf").read_bytes()
     assert written == wrong_content  # kept, not deleted
+    assert store.get(item.identity_key).status == STATUS_VERIFIED
+    store.close()
+
+
+@responses.activate
+def test_download_all_marks_downloading_before_verified(tmp_path):
+    """M12: the web dashboard shows in-progress files via a plain STATUS_DOWNLOADING
+    query -- verify _download_one actually writes that intermediate status
+    before the transfer completes, not just the final VERIFIED/FAILED row."""
+    release = threading.Event()
+
+    def blocking_callback(request):
+        release.wait(timeout=5)
+        return (200, {}, CONTENT)
+
+    responses.add_callback(responses.GET, "https://dl.humble.com/book.pdf", callback=blocking_callback)
+
+    client = Client(Session(cookie_value="dummy"))
+    store = StateStore(tmp_path / "state.sqlite")
+    item = _item()
+
+    result: dict = {}
+    thread = threading.Thread(
+        target=lambda: result.update(
+            report=download_all(client, [item], tmp_path / "dest", store, workers=1, show_progress=False)
+        )
+    )
+    thread.start()
+
+    # Poll until the DOWNLOADING row appears (it's written before the HTTP
+    # call the callback blocks inside) -- bounded, not a fixed sleep.
+    record = None
+    for _ in range(100):
+        record = store.get(item.identity_key)
+        if record is not None:
+            break
+        time.sleep(0.05)
+
+    assert record is not None
+    assert record.status == STATUS_DOWNLOADING
+
+    release.set()
+    thread.join(timeout=5)
+
     assert store.get(item.identity_key).status == STATUS_VERIFIED
     store.close()

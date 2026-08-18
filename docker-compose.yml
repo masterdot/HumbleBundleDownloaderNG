@@ -1,0 +1,36 @@
+# See CONCEPT_WEB.md for the full architecture. Three volumes keep every
+# piece of Humble-Bundle-specific data (session cookie, config.toml,
+# state.sqlite, downloaded files) outside the container image/writable layer:
+#   - ./hbdl-config -> config.toml, session.json (XDG_CONFIG_HOME)
+#   - ./hbdl-data   -> state.sqlite incl. catalog cache (XDG_DATA_HOME)
+#   - <your library path> -> downloaded files (HBDL_DEST)
+# Adjust the host paths below (left side of each volume mapping) to taste.
+#
+# Rebuilding: use ./docker/rebuild.sh instead of a bare `docker compose up -d
+# --build` -- it also prunes the dangling image layers left behind by the
+# previous build. Those pile up fast across repeated rebuilds and can fill
+# the host disk (this genuinely happened once during development).
+
+services:
+  hbdl-web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: web
+    ports:
+      - "8000:8000"
+      # noVNC (guided-login browser view, M13) is reverse-proxied through the
+      # FastAPI app itself under /vnc (web/routers/vnc_proxy.py) -- same
+      # origin as the rest of the UI, which is what makes clipboard
+      # paste into the login window work. websockify still listens on 6080
+      # *inside* the container only; it is intentionally not published here
+      # any more (it ran with -nopw, so this is also a small security win).
+    environment:
+      - XDG_CONFIG_HOME=/config
+      - XDG_DATA_HOME=/data
+      - HBDL_DEST=/library
+    volumes:
+      - ./hbdl-config:/config
+      - ./hbdl-data:/data
+      - "/Volumes/Ohne Titel/humblebundle:/library"
+    restart: unless-stopped

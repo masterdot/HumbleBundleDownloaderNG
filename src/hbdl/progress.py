@@ -6,8 +6,22 @@ See CONCEPT.md section 6 (Progress: ein Gesamtbalken ueber alle Dateien).
 from __future__ import annotations
 
 import threading
+from typing import Protocol, runtime_checkable
 
 from tqdm import tqdm
+
+
+@runtime_checkable
+class ProgressSink(Protocol):
+    """Structural interface download_all() needs from a progress reporter --
+    lets a caller (the web JobManager, see CONCEPT_WEB.md M11) inject an
+    alternative that publishes SSE events instead of/alongside driving a tqdm
+    bar, via download_all()'s progress_factory parameter."""
+
+    def advance(self, n: int) -> None: ...
+    def close(self) -> None: ...
+    def __enter__(self) -> "ProgressSink": ...
+    def __exit__(self, *exc) -> None: ...
 
 
 class ProgressReporter:

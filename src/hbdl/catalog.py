@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from hbdl.api import Client
 from hbdl.models import DownloadItem
+from hbdl.state import CatalogItemRecord, StateStore
 
 
 def _order_to_items(order: dict) -> list[DownloadItem]:
@@ -58,6 +59,35 @@ def build_catalog(client: Client, workers: int = 3, gamekeys: list[str] | None =
             order = future.result()
             items.extend(_order_to_items(order))
     return items
+
+
+def sync_catalog_cache(store: StateStore, items: list[DownloadItem]) -> None:
+    """Denormalizes freshly-discovered DownloadItems into the local
+    catalog_items cache table so the library browser (bundle/subproduct/file
+    columns, search, quick filters) can query bundle metadata without a live
+    API round-trip on every page load. Called right after build_catalog()
+    from both `cli.py sync` and the web JobManager -- deliberately not
+    auto-triggered on login, to avoid an unexpected network cost."""
+    now = datetime.now(timezone.utc).isoformat()
+    store.replace_catalog_items(
+        [
+            CatalogItemRecord(
+                identity_key=item.identity_key,
+                gamekey=item.gamekey,
+                human_name=item.human_name,
+                subproduct_name=item.subproduct_name,
+                platform=item.platform,
+                variant_name=item.variant_name,
+                filename=item.filename,
+                file_size=item.file_size,
+                has_torrent=item.torrent_url is not None,
+                md5=item.md5,
+                sha1=item.sha1,
+                last_seen_at=now,
+            )
+            for item in items
+        ]
+    )
 
 
 def refresh_item_url(client: Client, item: DownloadItem) -> DownloadItem:
