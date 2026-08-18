@@ -10,3 +10,4 @@ __pycache__/
 /HumbleLibrary/
 *.sqlite
 session.json
+HumbleBundleDownloaderNG.code-workspace

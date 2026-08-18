@@ -10,9 +10,9 @@ from typing import Optional
 
 import typer
 
-from hbdl import auth, config
+from hbdl import auth, config, i18n
 from hbdl.api import Client
-from hbdl.catalog import build_catalog
+from hbdl.catalog import build_catalog, sync_catalog_cache
 from hbdl.downloader.direct import download_all, verify_only
 from hbdl.downloader.strategy import STRATEGIES
 from hbdl.state import open_store
@@ -20,6 +20,69 @@ from hbdl.state import open_store
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 auth_app = typer.Typer(no_args_is_help=True, help="Login/Session verwalten")
 app.add_typer(auth_app, name="auth")
+web_app = typer.Typer(no_args_is_help=True, help="Weboberflaeche (optional, `pip install hbdl[web]`).")
+app.add_typer(web_app, name="web")
+config_app = typer.Typer(no_args_is_help=True, help="config.toml lesen/schreiben (dest, workers, strategy, cookie_file).")
+app.add_typer(config_app, name="config")
+
+CONFIG_KEYS = ("dest", "workers", "strategy", "lang", "cookie_file")
+
+
+@config_app.command("show")
+def config_show(
+    output_format: str = typer.Option("table", "--format", help="table oder json"),
+) -> None:
+    """Zeigt die aktuell wirksame Konfiguration (config.toml, sonst Defaults)."""
+    cfg = config.Config.load()
+    data = {
+        "dest": str(cfg.dest),
+        "workers": cfg.workers,
+        "strategy": cfg.strategy,
+        "lang": cfg.lang,
+        "cookie_file": str(cfg.cookie_file) if cfg.cookie_file else None,
+    }
+    if output_format == "json":
+        typer.echo(json.dumps(data, indent=2))
+        return
+    for key, value in data.items():
+        typer.echo(f"{key:12s} = {value}")
+
+
+@config_app.command("set")
+def config_set(
+    key: str = typer.Argument(..., help=f"Einer von: {', '.join(CONFIG_KEYS)}."),
+    value: str = typer.Argument(...),
+) -> None:
+    """Setzt einen Konfigurationswert dauerhaft in config.toml. Andere bereits
+    gesetzte Werte bleiben dabei erhalten (load -> ein Feld aendern -> save)."""
+    if key not in CONFIG_KEYS:
+        typer.secho(f"Unbekannter Schluessel '{key}', erlaubt: {', '.join(CONFIG_KEYS)}.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    cfg = config.Config.load()
+    if key == "dest":
+        cfg.dest = Path(value).expanduser()
+    elif key == "workers":
+        try:
+            cfg.workers = int(value)
+        except ValueError:
+            typer.secho("workers muss eine ganze Zahl sein.", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+    elif key == "strategy":
+        if value not in STRATEGIES:
+            typer.secho(f"Unbekannte Strategie '{value}', erlaubt: {', '.join(STRATEGIES)}.", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+        cfg.strategy = value
+    elif key == "lang":
+        if value not in config.LANGUAGES:
+            typer.secho(f"Unbekannte Sprache '{value}', erlaubt: {', '.join(config.LANGUAGES)}.", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+        cfg.lang = value
+    elif key == "cookie_file":
+        cfg.cookie_file = Path(value).expanduser()
+
+    cfg.save()
+    typer.secho(f"{key} = {value} gespeichert ({config.CONFIG_FILE}).", fg=typer.colors.GREEN)
 
 
 @auth_app.command("login")
@@ -32,7 +95,7 @@ def auth_login(
     except auth.AuthError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
-    typer.secho("Login erfolgreich, Session gespeichert.", fg=typer.colors.GREEN)
+    typer.secho(i18n.t("cli.auth.login_success"), fg=typer.colors.GREEN)
 
 
 @auth_app.command("check")
@@ -54,10 +117,11 @@ def auth_check(
 def list_items(
     cookie: Optional[str] = typer.Option(None, help="Roher _simpleauth_sess-Wert."),
     cookie_file: Optional[Path] = typer.Option(None, help="Netscape cookies.txt mit _simpleauth_sess."),
-    workers: int = typer.Option(config.DEFAULT_WORKERS, help="Parallele Order-Detail-Abfragen."),
+    workers: Optional[int] = typer.Option(None, help="Parallele Order-Detail-Abfragen. Default: config.toml, sonst 3."),
     output_format: str = typer.Option("table", "--format", help="table oder json"),
 ) -> None:
     """Nur Discovery: listet alle Dateien der Bibliothek auf, laedt nichts herunter."""
+    workers = workers if workers is not None else config.Config.load().workers
     try:
         session = auth.resolve_session(cookie=cookie, cookie_file=cookie_file)
     except auth.AuthError as exc:
@@ -66,6 +130,9 @@ def list_items(
 
     client = Client(session)
     items = build_catalog(client, workers=workers)
+
+    with open_store() as store:
+        sync_catalog_cache(store, items)
 
     if output_format == "json":
         payload = [
@@ -91,19 +158,28 @@ def list_items(
 
 @app.command("sync")
 def sync(
-    dest: Path = typer.Option(config.DEFAULT_DEST, help="Zielverzeichnis fuer heruntergeladene Dateien."),
+    dest: Optional[Path] = typer.Option(
+        None,
+        help="Zielverzeichnis fuer heruntergeladene Dateien. "
+        "Default-Praezedenz: HBDL_DEST-Env > config.toml > ./HumbleLibrary.",
+    ),
     cookie: Optional[str] = typer.Option(None, help="Roher _simpleauth_sess-Wert."),
     cookie_file: Optional[Path] = typer.Option(None, help="Netscape cookies.txt mit _simpleauth_sess."),
-    workers: int = typer.Option(config.DEFAULT_WORKERS, help="Parallele Downloads/Order-Abfragen."),
-    strategy: str = typer.Option(
-        config.DEFAULT_STRATEGY,
-        help="auto (Torrent wenn verfuegbar, sonst direct) | direct | torrent (v1: speichert nur die .torrent-Datei).",
+    workers: Optional[int] = typer.Option(None, help="Parallele Downloads/Order-Abfragen. Default: config.toml, sonst 3."),
+    strategy: Optional[str] = typer.Option(
+        None,
+        help="auto (Torrent wenn verfuegbar, sonst direct) | direct | torrent (v1: speichert nur die .torrent-Datei). "
+        "Default: config.toml, sonst auto.",
     ),
     platform: Optional[str] = typer.Option(None, help="Komma-getrennte Plattform-Filter, z.B. windows,ebook."),
     dry_run: bool = typer.Option(False, help="Nur planen/auflisten, nichts herunterladen."),
     verify_only_flag: bool = typer.Option(False, "--verify-only", help="Bestehende Dateien gegen Manifest neu hashen, keine Downloads."),
 ) -> None:
     """Ermittelt die Bibliothek und laedt alle (gefilterten) Dateien herunter."""
+    cfg = config.Config.load()
+    dest = config.resolve_dest(dest)
+    workers = workers if workers is not None else cfg.workers
+    strategy = strategy if strategy is not None else cfg.strategy
     if strategy not in STRATEGIES:
         typer.secho(f"Unbekannte Strategie '{strategy}', erlaubt: {', '.join(STRATEGIES)}.", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -117,24 +193,29 @@ def sync(
     client = Client(session)
     items = build_catalog(client, workers=workers)
 
-    if platform:
-        wanted = {p.strip().lower() for p in platform.split(",")}
-        items = [i for i in items if i.platform.lower() in wanted]
-
-    if not items:
-        typer.echo("Keine Dateien zu verarbeiten (Bibliothek leer oder Filter zu eng).")
-        return
-
-    total_bytes = sum(i.file_size for i in items)
-    typer.echo(f"{len(items)} Dateien, {total_bytes / (1024**3):.2f} GiB gesamt.")
-
-    if dry_run:
-        for item in items:
-            typer.echo(f"  {item.human_name} / {item.platform} / {item.filename}")
-        return
-
-    dest.mkdir(parents=True, exist_ok=True)
     with open_store() as store:
+        # Cache the *full* discovered catalog (before the --platform filter
+        # below) so the web library browser reflects the whole account, not
+        # just whatever this particular sync run chose to download.
+        sync_catalog_cache(store, items)
+
+        if platform:
+            wanted = {p.strip().lower() for p in platform.split(",")}
+            items = [i for i in items if i.platform.lower() in wanted]
+
+        if not items:
+            typer.echo("Keine Dateien zu verarbeiten (Bibliothek leer oder Filter zu eng).")
+            return
+
+        total_bytes = sum(i.file_size for i in items)
+        typer.echo(f"{len(items)} Dateien, {total_bytes / (1024**3):.2f} GiB gesamt.")
+
+        if dry_run:
+            for item in items:
+                typer.echo(f"  {item.human_name} / {item.platform} / {item.filename}")
+            return
+
+        dest.mkdir(parents=True, exist_ok=True)
         if verify_only_flag:
             report = verify_only(items, dest, store)
         else:
@@ -166,7 +247,40 @@ def sync(
         raise typer.Exit(1)
 
 
+@web_app.command("serve")
+def web_serve(
+    host: str = typer.Option("127.0.0.1", help="Bind-Adresse."),
+    port: int = typer.Option(8000, help="Port."),
+    reload: bool = typer.Option(False, help="Auto-Reload fuer Entwicklung (nur mit Quellcode-Checkout sinnvoll)."),
+) -> None:
+    """Startet die Weboberflaeche (FastAPI/uvicorn). Steuert denselben Downloader
+    wie die CLI -- fuehre nicht gleichzeitig `hbdl sync` und einen laufenden
+    Web-Job gegen denselben Zielordner aus (siehe CONCEPT_WEB.md)."""
+    try:
+        import uvicorn
+
+        from hbdl.web.app import create_app  # noqa: F401  (import-availability check)
+    except ImportError as exc:
+        typer.secho(
+            "Web-Abhaengigkeiten fehlen. Installiere sie mit `pip install hbdl[web]`.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1) from exc
+
+    if reload:
+        uvicorn.run("hbdl.web.app:create_app", factory=True, host=host, port=port, reload=True)
+    else:
+        uvicorn.run(create_app(), host=host, port=port)
+
+
 def main() -> None:
+    # Set once here rather than per-command: every command body (and, via
+    # `hbdl web serve`, the whole web UI process) runs after this point, so a
+    # single call covers both entry points. `--help` text is generated at
+    # Typer-decorator/import time, before this runs, so it stays static-
+    # English regardless (see CONCEPT_WEB.md M14).
+    i18n.set_lang(config.resolve_lang())
     app()
 
 

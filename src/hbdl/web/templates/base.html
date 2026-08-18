@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="{{ lang() }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}hbdl{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/htmx-sse.js" defer></script>
+  <script src="/static/alpine.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">hbdl</a>
+    <nav>
+      <a href="/">{{ t("nav.dashboard") }}</a>
+      <a href="/library">{{ t("nav.library") }}</a>
+      <a href="/settings">{{ t("nav.settings") }}</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="sitefooter">
+    <span>&copy; masterdot</span>
+    <a href="https://github.com/masterdot/HumbleBundleDownloaderNG" target="_blank" rel="noopener">{{ t("footer.github") }}</a>
+    <a href="https://github.com/sponsors/masterdot/" target="_blank" rel="noopener">{{ t("footer.donate") }}</a>
+  </footer>
+</body>
+</html>
