@@ -144,7 +144,8 @@ def refresh(request: Request, store: StateStore = Depends(get_store)):
     try:
         session = auth.resolve_session()
     except auth.AuthError as exc:
-        return templates.TemplateResponse(request, "_auth_error.html", {"error": str(exc)})
+        error = i18n.t(exc.key, **exc.key_kwargs) if exc.key else str(exc)
+        return templates.TemplateResponse(request, "_auth_error.html", {"error": error})
 
     client = Client(session)
     items = build_catalog(client)

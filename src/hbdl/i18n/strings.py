@@ -97,6 +97,41 @@ CATALOG: dict[str, dict[str, str]] = {
         "de": "workers muss eine ganze Zahl sein.",
         "en": "workers must be an integer.",
     },
+    # error.auth.* -- AuthError.key values (see auth.py). str(exc) stays
+    # German (used for logs); these are what the display layer shows instead.
+    "error.auth.playwright_missing": {
+        "de": (
+            "playwright ist nicht installiert. `pip install hbdl[dev]` bzw. "
+            "`playwright install chromium` ausfuehren."
+        ),
+        "en": "playwright is not installed. Run `pip install hbdl[dev]` or `playwright install chromium`.",
+    },
+    "error.auth.login_window_closed": {
+        "de": (
+            "Login-Fenster wurde geschlossen oder die Anmeldung wurde nicht "
+            "innerhalb von 5 Minuten abgeschlossen."
+        ),
+        "en": "Login window was closed, or the login wasn't completed within 5 minutes.",
+    },
+    "error.auth.cookie_not_found_after_login": {
+        "de": "Login schien erfolgreich, aber der Cookie '{cookie_name}' wurde nicht gefunden.",
+        "en": "Login appeared to succeed, but the '{cookie_name}' cookie wasn't found.",
+    },
+    "error.auth.cookie_not_in_file": {
+        "de": "Kein '{cookie_name}'-Cookie in {path} gefunden.",
+        "en": "No '{cookie_name}' cookie found in {path}.",
+    },
+    "error.auth.no_login_found": {
+        "de": (
+            "Kein Login gefunden. Fuehre `hbdl auth login` aus, oder uebergib "
+            "--cookie / --cookie-file / setze HBDL_COOKIE."
+        ),
+        "en": "No login found. Run `hbdl auth login`, or pass --cookie / --cookie-file / set HBDL_COOKIE.",
+    },
+    "error.auth.cookie_invalid": {
+        "de": "Cookie ungueltig oder abgelaufen -- `hbdl auth login` erneut ausfuehren.",
+        "en": "Cookie invalid or expired -- run `hbdl auth login` again.",
+    },
     # library.status.* -- shared by _status_badge.html (deduped out of
     # _column_file.html / _flat_list.html, which used to carry an identical
     # if/elif block each).

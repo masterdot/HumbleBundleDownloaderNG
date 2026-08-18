@@ -93,7 +93,7 @@ def auth_login(
     try:
         auth.guided_login(headless=headless)
     except auth.AuthError as exc:
-        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t(exc.key, **exc.key_kwargs) if exc.key else str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
     typer.secho(i18n.t("cli.auth.login_success"), fg=typer.colors.GREEN)
 
@@ -108,7 +108,7 @@ def auth_check(
         session = auth.resolve_session(cookie=cookie, cookie_file=cookie_file)
         info = auth.check_session(session)
     except auth.AuthError as exc:
-        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t(exc.key, **exc.key_kwargs) if exc.key else str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
     typer.secho(i18n.t("cli.auth.check_ok", count=info["order_count"]), fg=typer.colors.GREEN)
 
@@ -125,7 +125,7 @@ def list_items(
     try:
         session = auth.resolve_session(cookie=cookie, cookie_file=cookie_file)
     except auth.AuthError as exc:
-        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t(exc.key, **exc.key_kwargs) if exc.key else str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     client = Client(session)
@@ -187,7 +187,7 @@ def sync(
     try:
         session = auth.resolve_session(cookie=cookie, cookie_file=cookie_file)
     except auth.AuthError as exc:
-        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t(exc.key, **exc.key_kwargs) if exc.key else str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     client = Client(session)
