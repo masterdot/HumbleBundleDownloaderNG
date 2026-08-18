@@ -25,6 +25,16 @@ CATALOG: dict[str, dict[str, str]] = {
     },
     # Shared across dashboard.html and settings.html.
     "shared.dest_label": {"de": "Bibliotheks-Zielordner", "en": "Library destination folder"},
+    # error.* -- shared between the web settings form and the CLI (both hit
+    # the identical validation cases against config.STRATEGIES/LANGUAGES).
+    "error.unknown_strategy": {
+        "de": "Unbekannte Strategie '{value}', erlaubt: {allowed}.",
+        "en": "Unknown strategy '{value}', allowed: {allowed}.",
+    },
+    "error.workers_min": {
+        "de": "workers muss mindestens 1 sein.",
+        "en": "workers must be at least 1.",
+    },
     # library.status.* -- shared by _status_badge.html (deduped out of
     # _column_file.html / _flat_list.html, which used to carry an identical
     # if/elif block each).
@@ -36,6 +46,14 @@ CATALOG: dict[str, dict[str, str]] = {
     "library.no_contents": {"de": "Keine Inhalte.", "en": "No content."},
     "library.no_results": {"de": "Keine Treffer.", "en": "No results."},
     "library.file_count": {"de": "{n} Dateien", "en": "{n} files"},
+    "library.search_heading": {
+        "de": 'Suche: "{query}" ({count} Treffer)',
+        "en": 'Search: "{query}" ({count} results)',
+    },
+    "library.filter_heading": {
+        "de": "Filter: {label} ({count} Treffer)",
+        "en": "Filter: {label} ({count} results)",
+    },
     "library.no_bundles_cached": {
         "de": 'Keine Bundles im Cache -- fuehre `hbdl sync`/`hbdl list` aus oder "Aktualisieren".',
         "en": 'No bundles cached yet -- run `hbdl sync`/`hbdl list`, or "Refresh".',
