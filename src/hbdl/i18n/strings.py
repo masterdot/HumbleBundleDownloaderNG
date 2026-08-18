@@ -23,6 +23,64 @@ CATALOG: dict[str, dict[str, str]] = {
         "de": "Login erfolgreich, Session gespeichert.",
         "en": "Login successful, session saved.",
     },
+    "cli.auth.check_ok": {
+        "de": "OK - {count} Bestellungen gefunden.",
+        "en": "OK - {count} orders found.",
+    },
+    "cli.config.unknown_key": {
+        "de": "Unbekannter Schluessel '{key}', erlaubt: {allowed}.",
+        "en": "Unknown key '{key}', allowed: {allowed}.",
+    },
+    "cli.config.set_saved": {
+        "de": "{key} = {value} gespeichert ({path}).",
+        "en": "{key} = {value} saved ({path}).",
+    },
+    "cli.config.unknown_lang": {
+        "de": "Unbekannte Sprache '{value}', erlaubt: {allowed}.",
+        "en": "Unknown language '{value}', allowed: {allowed}.",
+    },
+    "cli.list.found_count": {
+        "de": "\n{count} Dateien gefunden.",
+        "en": "\n{count} files found.",
+    },
+    "cli.sync.no_items": {
+        "de": "Keine Dateien zu verarbeiten (Bibliothek leer oder Filter zu eng).",
+        "en": "No files to process (library empty or filter too narrow).",
+    },
+    "cli.sync.total_summary": {
+        "de": "{count} Dateien, {gib:.2f} GiB gesamt.",
+        "en": "{count} files, {gib:.2f} GiB total.",
+    },
+    "cli.sync.verify_summary": {
+        "de": "{succeeded} verifiziert, {failed} fehlgeschlagen/fehlend.",
+        "en": "{succeeded} verified, {failed} failed/missing.",
+    },
+    "cli.sync.download_summary": {
+        "de": "{succeeded} heruntergeladen, {skipped} uebersprungen (bereits vorhanden).",
+        "en": "{succeeded} downloaded, {skipped} skipped (already present).",
+    },
+    "cli.sync.circuit_breaker": {
+        "de": (
+            "Circuit Breaker ausgeloest: zu viele 403/429-Antworten. Lauf abgebrochen -- "
+            "pruefe, ob der Cookie noch gueltig ist (`hbdl auth check`), bevor du erneut startest."
+        ),
+        "en": (
+            "Circuit breaker tripped: too many 403/429 responses. Run aborted -- check "
+            "whether the cookie is still valid (`hbdl auth check`) before starting again."
+        ),
+    },
+    "cli.sync.warnings_heading": {
+        "de": "{count} mit Warnung (Datei behalten):",
+        "en": "{count} with a warning (file kept):",
+    },
+    "cli.sync.failed_heading": {
+        "de": "{count} fehlgeschlagen:",
+        "en": "{count} failed:",
+    },
+    "cli.web.missing_deps": {
+        "de": "Web-Abhaengigkeiten fehlen. Installiere sie mit `pip install hbdl[web]`.",
+        "en": "Web dependencies are missing. Install them with `pip install hbdl[web]`.",
+    },
     # Shared across dashboard.html and settings.html.
     "shared.dest_label": {"de": "Bibliotheks-Zielordner", "en": "Library destination folder"},
     # error.* -- shared between the web settings form and the CLI (both hit
@@ -34,6 +92,10 @@ CATALOG: dict[str, dict[str, str]] = {
     "error.workers_min": {
         "de": "workers muss mindestens 1 sein.",
         "en": "workers must be at least 1.",
+    },
+    "error.workers_not_integer": {
+        "de": "workers muss eine ganze Zahl sein.",
+        "en": "workers must be an integer.",
     },
     # library.status.* -- shared by _status_badge.html (deduped out of
     # _column_file.html / _flat_list.html, which used to carry an identical

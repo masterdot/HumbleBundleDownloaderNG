@@ -25,7 +25,10 @@ def get_lang() -> str:
     return _lang
 
 
-def t(key: str, **kwargs: object) -> str:
+def t(key: str, /, **kwargs: object) -> str:
+    # `key` is positional-only so a catalog string can freely use `{key}` (or
+    # any other name) as an interpolation placeholder without colliding with
+    # this parameter -- see the cli.config.* entries in strings.py.
     entry = CATALOG[key]
     text = entry.get(_lang, entry["de"])
     return text.format(**kwargs) if kwargs else text

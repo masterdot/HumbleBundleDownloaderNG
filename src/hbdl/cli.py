@@ -56,7 +56,7 @@ def config_set(
     """Setzt einen Konfigurationswert dauerhaft in config.toml. Andere bereits
     gesetzte Werte bleiben dabei erhalten (load -> ein Feld aendern -> save)."""
     if key not in CONFIG_KEYS:
-        typer.secho(f"Unbekannter Schluessel '{key}', erlaubt: {', '.join(CONFIG_KEYS)}.", fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t("cli.config.unknown_key", key=key, allowed=", ".join(CONFIG_KEYS)), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     cfg = config.Config.load()
@@ -66,23 +66,23 @@ def config_set(
         try:
             cfg.workers = int(value)
         except ValueError:
-            typer.secho("workers muss eine ganze Zahl sein.", fg=typer.colors.RED, err=True)
+            typer.secho(i18n.t("error.workers_not_integer"), fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
     elif key == "strategy":
         if value not in STRATEGIES:
-            typer.secho(f"Unbekannte Strategie '{value}', erlaubt: {', '.join(STRATEGIES)}.", fg=typer.colors.RED, err=True)
+            typer.secho(i18n.t("error.unknown_strategy", value=value, allowed=", ".join(STRATEGIES)), fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
         cfg.strategy = value
     elif key == "lang":
         if value not in config.LANGUAGES:
-            typer.secho(f"Unbekannte Sprache '{value}', erlaubt: {', '.join(config.LANGUAGES)}.", fg=typer.colors.RED, err=True)
+            typer.secho(i18n.t("cli.config.unknown_lang", value=value, allowed=", ".join(config.LANGUAGES)), fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
         cfg.lang = value
     elif key == "cookie_file":
         cfg.cookie_file = Path(value).expanduser()
 
     cfg.save()
-    typer.secho(f"{key} = {value} gespeichert ({config.CONFIG_FILE}).", fg=typer.colors.GREEN)
+    typer.secho(i18n.t("cli.config.set_saved", key=key, value=value, path=config.CONFIG_FILE), fg=typer.colors.GREEN)
 
 
 @auth_app.command("login")
@@ -110,7 +110,7 @@ def auth_check(
     except auth.AuthError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
-    typer.secho(f"OK - {info['order_count']} Bestellungen gefunden.", fg=typer.colors.GREEN)
+    typer.secho(i18n.t("cli.auth.check_ok", count=info["order_count"]), fg=typer.colors.GREEN)
 
 
 @app.command("list")
@@ -153,7 +153,7 @@ def list_items(
     for item in items:
         torrent_flag = "T" if item.torrent_url else " "
         typer.echo(f"[{torrent_flag}] {item.human_name} / {item.platform} / {item.filename} ({item.file_size} bytes)")
-    typer.echo(f"\n{len(items)} Dateien gefunden.", err=True)
+    typer.echo(i18n.t("cli.list.found_count", count=len(items)), err=True)
 
 
 @app.command("sync")
@@ -181,7 +181,7 @@ def sync(
     workers = workers if workers is not None else cfg.workers
     strategy = strategy if strategy is not None else cfg.strategy
     if strategy not in STRATEGIES:
-        typer.secho(f"Unbekannte Strategie '{strategy}', erlaubt: {', '.join(STRATEGIES)}.", fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t("error.unknown_strategy", value=strategy, allowed=", ".join(STRATEGIES)), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     try:
@@ -204,11 +204,11 @@ def sync(
             items = [i for i in items if i.platform.lower() in wanted]
 
         if not items:
-            typer.echo("Keine Dateien zu verarbeiten (Bibliothek leer oder Filter zu eng).")
+            typer.echo(i18n.t("cli.sync.no_items"))
             return
 
         total_bytes = sum(i.file_size for i in items)
-        typer.echo(f"{len(items)} Dateien, {total_bytes / (1024**3):.2f} GiB gesamt.")
+        typer.echo(i18n.t("cli.sync.total_summary", count=len(items), gib=total_bytes / (1024**3)))
 
         if dry_run:
             for item in items:
@@ -223,25 +223,26 @@ def sync(
 
     typer.echo("")
     if verify_only_flag:
-        typer.secho(f"{len(report.succeeded)} verifiziert, {len(report.failed)} fehlgeschlagen/fehlend.", fg=typer.colors.GREEN)
-    else:
-        typer.secho(f"{len(report.succeeded)} heruntergeladen, {len(report.skipped)} uebersprungen (bereits vorhanden).", fg=typer.colors.GREEN)
-
-    if getattr(report, "circuit_breaker_tripped", False):
         typer.secho(
-            "Circuit Breaker ausgeloest: zu viele 403/429-Antworten. Lauf abgebrochen -- "
-            "pruefe, ob der Cookie noch gueltig ist (`hbdl auth check`), bevor du erneut startest.",
-            fg=typer.colors.RED,
-            err=True,
+            i18n.t("cli.sync.verify_summary", succeeded=len(report.succeeded), failed=len(report.failed)),
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho(
+            i18n.t("cli.sync.download_summary", succeeded=len(report.succeeded), skipped=len(report.skipped)),
+            fg=typer.colors.GREEN,
         )
 
+    if getattr(report, "circuit_breaker_tripped", False):
+        typer.secho(i18n.t("cli.sync.circuit_breaker"), fg=typer.colors.RED, err=True)
+
     if report.warnings:
-        typer.secho(f"{len(report.warnings)} mit Warnung (Datei behalten):", fg=typer.colors.YELLOW, err=True)
+        typer.secho(i18n.t("cli.sync.warnings_heading", count=len(report.warnings)), fg=typer.colors.YELLOW, err=True)
         for result in report.warnings:
             typer.secho(f"  {result.item.human_name}/{result.item.filename}: {result.warning}", fg=typer.colors.YELLOW, err=True)
 
     if report.failed:
-        typer.secho(f"{len(report.failed)} fehlgeschlagen:", fg=typer.colors.RED, err=True)
+        typer.secho(i18n.t("cli.sync.failed_heading", count=len(report.failed)), fg=typer.colors.RED, err=True)
         for result in report.failed:
             typer.secho(f"  {result.item.human_name}/{result.item.filename}: {result.error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -261,11 +262,7 @@ def web_serve(
 
         from hbdl.web.app import create_app  # noqa: F401  (import-availability check)
     except ImportError as exc:
-        typer.secho(
-            "Web-Abhaengigkeiten fehlen. Installiere sie mit `pip install hbdl[web]`.",
-            fg=typer.colors.RED,
-            err=True,
-        )
+        typer.secho(i18n.t("cli.web.missing_deps"), fg=typer.colors.RED, err=True)
         raise typer.Exit(1) from exc
 
     if reload:
