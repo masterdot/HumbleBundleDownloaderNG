@@ -1,35 +1,58 @@
-# Konzept: HumbleBundleDownloaderNG
+*[English](CONCEPT.md) | [Deutsch](CONCEPT.de.md)*
 
-## 1. Ziel & Scope
+# Concept: HumbleBundleDownloaderNG
 
-Ein Python-CLI-Tool, das sich bei humblebundle.com authentifiziert, die komplette Spiele-/Ebook-Bibliothek des Accounts ermittelt und alle Dateien lokal herunterlädt. Zwei Download-Strategien werden unterstützt:
+## 1. Goal & Scope
 
-- **Direkt-Download** über eine verwaltete Warteschlange (Queue mit Nebenläufigkeit, Resume, Integritätsprüfung).
-- **BitTorrent** als Alternative, sofern für eine Datei verfügbar.
+A Python CLI tool that authenticates against humblebundle.com, discovers the
+account's complete game/ebook library, and downloads every file locally. Two
+download strategies are supported:
 
-Das Tool spricht ausschließlich die JSON-API von Humble Bundle an (nicht die gerenderte HTML-Bibliotheksseite `/home/library`), da die API stabiler und einfacher zu parsen ist.
+- **Direct download** via a managed queue (concurrency, resume, integrity
+  verification).
+- **BitTorrent** as an alternative, where available for a given file.
+
+The tool talks exclusively to Humble Bundle's JSON API (not the rendered
+`/home/library` HTML page), since the API is more stable and easier to parse.
 
 ## 2. Auth
 
-**Primärer Weg: geführtes Playwright-Login.**
+**Primary path: guided Playwright login.**
 
-`hbdl auth login` öffnet ein echtes, sichtbares Chromium-Fenster (Playwright) und navigiert zur Humble-Bundle-Login-Seite. Der Nutzer gibt dort selbst seine Zugangsdaten ein und löst Captcha/2FA manuell — das Tool greift an dieser Stelle nicht ein. Sobald die Weiterleitung auf `/home` erkannt wird, liest das Tool den Session-Cookie `_simpleauth_sess` automatisch aus dem Browserkontext aus und speichert ihn lokal (verschlüsselt oder zumindest mit restriktiven Dateirechten, `chmod 600`).
+`hbdl auth login` opens a real, visible Chromium window (Playwright) and
+navigates to the Humble Bundle login page. The user enters their own
+credentials there and solves captcha/2FA manually — the tool never touches
+this step. Once the redirect to `/home` is detected, the tool automatically
+reads the `_simpleauth_sess` session cookie out of the browser context and
+saves it locally (encrypted, or at least with restrictive file permissions,
+`chmod 600`).
 
-**Warum kein vollautomatisches Login mit Username/Passwort im Tool:** Humble Bundle sichert `/processlogin` mit reCAPTCHA ab. Ein Tool könnte das nur über bezahlte Captcha-Solver-Dienste umgehen — das widerspricht klar der Absicht des Anbieters und ist nicht vertretbar. Der Playwright-Ansatz vermeidet dieses Problem vollständig, da der Mensch die Interaktion mit Captcha/2FA übernimmt, während das Tool nur das Ergebnis (den Cookie) übernimmt.
+**Why no fully automated username/password login in the tool:** Humble
+Bundle protects `/processlogin` with reCAPTCHA. A tool could only get around
+that via paid captcha-solving services — that clearly conflicts with the
+provider's intent and isn't defensible. The Playwright approach avoids this
+problem entirely, since the human handles the captcha/2FA interaction while
+the tool only picks up the result (the cookie).
 
-**Fallback für Headless-/Server-Betrieb** (kein lokales Display verfügbar): manuelle Cookie-Übergabe via
-- `--cookie-file PATH` (Netscape-`cookies.txt`-Format, kompatibel mit Browser-Export-Extensions),
-- `--cookie VALUE` (roher `_simpleauth_sess`-Wert),
-- Env-Var `HBDL_COOKIE` / `HBDL_COOKIE_FILE`,
-- oder `cookie_file`-Eintrag in der Config-Datei.
+**Fallback for headless/server operation** (no local display available):
+manual cookie handoff via
+- `--cookie-file PATH` (Netscape `cookies.txt` format, compatible with
+  browser export extensions),
+- `--cookie VALUE` (raw `_simpleauth_sess` value),
+- env vars `HBDL_COOKIE` / `HBDL_COOKIE_FILE`,
+- or a `cookie_file` entry in the config file.
 
-Jeder API-Request muss zusätzlich zum Cookie den Header `X-Requested-By: hb_android_app` mitschicken, sonst wird er von Humble Bundle abgelehnt.
+Every API request must additionally carry the `X-Requested-By:
+hb_android_app` header alongside the cookie, or Humble Bundle rejects it.
 
-Beim Start führt `auth.py` einen günstigen Validierungs-Call (`GET /api/v1/user/order`) aus und bricht bei 401/403 sofort mit klarer Fehlermeldung ab ("Cookie ungültig/abgelaufen — `hbdl auth login` erneut ausführen"), statt tief im Discovery-Lauf zu scheitern.
+At startup, `auth.py` runs a cheap validation call (`GET
+/api/v1/user/order`) and aborts immediately on 401/403 with a clear error
+message ("cookie invalid/expired — run `hbdl auth login` again"), instead of
+failing deep inside a discovery run.
 
-## 3. Architektur / Modulaufbau
+## 3. Architecture / Module Layout
 
-`src/`-Layout mit `pyproject.toml`, installierbar per `pipx`/`uv tool`:
+`src/`-layout with `pyproject.toml`, installable via `pipx`/`uv tool`:
 
 ```
 HumbleBundleDownloaderNG/
@@ -40,151 +63,231 @@ HumbleBundleDownloaderNG/
 │   └── hbdl/
 │       ├── __init__.py
 │       ├── __main__.py          # `python -m hbdl`
-│       ├── cli.py               # typer-Kommandobaum
-│       ├── config.py            # Config-Datei + Env-Var-Auflösung, XDG-Pfade
-│       ├── auth.py              # Playwright-Login, Cookie-Fallbacks, HttpClient
-│       ├── api.py               # Wrapper für Order-Liste / Order-Details
-│       ├── models.py            # DownloadItem, Order, Subproduct Dataclasses
-│       ├── catalog.py           # Discovery: Orders -> flache DownloadItem-Liste
+│       ├── cli.py               # typer command tree
+│       ├── config.py            # config file + env var resolution, XDG paths
+│       ├── auth.py              # Playwright login, cookie fallbacks, HttpClient
+│       ├── api.py               # wrapper for order list / order details
+│       ├── models.py            # DownloadItem, Order, Subproduct dataclasses
+│       ├── catalog.py           # discovery: orders -> flat DownloadItem list
 │       ├── downloader/
 │       │   ├── __init__.py
-│       │   ├── direct.py        # HTTP-Download-Queue/Worker-Pool
-│       │   ├── torrent.py       # .torrent-Fetch (v1: nur speichern)
-│       │   └── strategy.py      # Direct-vs-Torrent-Entscheidung pro Item
-│       ├── state.py             # lokale SQLite-Manifest für Idempotenz
-│       └── progress.py          # tqdm-basiertes Reporting
+│       │   ├── direct.py        # HTTP download queue/worker pool
+│       │   ├── torrent.py       # .torrent fetch (v1: save only)
+│       │   └── strategy.py      # direct-vs-torrent decision per item
+│       ├── state.py             # local SQLite manifest for idempotency
+│       └── progress.py          # tqdm-based reporting
 └── tests/
     ├── test_catalog.py
     ├── test_direct_downloader.py
-    └── fixtures/                # sanitisierte, aufgezeichnete JSON-Responses
+    └── fixtures/                # sanitized, recorded JSON responses
 ```
 
-Datenablage (via `platformdirs`, plattformübergreifend):
+Data storage (via `platformdirs`, cross-platform):
 - Config: `~/.config/hbdl/config.toml`
-- Gespeicherter Auth-Cookie: `~/.config/hbdl/session.json` (restriktive Rechte)
-- State/Manifest: `~/.local/share/hbdl/state.sqlite`
-- Heruntergeladene Dateien: benutzerdefiniertes `--dest`, Default `./HumbleLibrary`
+- Saved auth cookie: `~/.config/hbdl/session.json` (restrictive permissions)
+- State/manifest: `~/.local/share/hbdl/state.sqlite`
+- Downloaded files: user-configurable `--dest`, default `./HumbleLibrary`
 
-Entry Point: `pyproject.toml` → `[project.scripts] hbdl = "hbdl.cli:main"`.
+Entry point: `pyproject.toml` → `[project.scripts] hbdl = "hbdl.cli:main"`.
 
-## 4. Datenmodell
+## 4. Data Model
 
 ```python
 @dataclass(slots=True)
 class DownloadItem:
     gamekey: str
-    human_name: str          # Bundle-/Produktname, für Ordnerbenennung
-    subproduct_name: str     # z.B. "Half-Life 2"
+    human_name: str          # bundle/product name, used for folder naming
+    subproduct_name: str     # e.g. "Half-Life 2"
     platform: str            # "windows" | "mac" | "linux" | "ebook" | "android" | ...
-    variant_name: str        # download_struct[].name, z.B. "Installer" / "MOBI"
+    variant_name: str        # download_struct[].name, e.g. "Installer" / "MOBI"
     filename: str
-    url: str                 # signierte Web-URL (TTL-begrenzt)
-    url_fetched_at: datetime # für TTL-Staleness-Checks
+    url: str                 # signed web URL (TTL-limited)
+    url_fetched_at: datetime # for TTL staleness checks
     file_size: int
     md5: str | None
     sha1: str | None
-    torrent_url: str | None  # None, falls keine BitTorrent-Option
-    dest_path: Path          # einmalig berechnet
+    torrent_url: str | None  # None if there's no BitTorrent option
+    dest_path: Path          # computed once
 ```
 
-Da die API keinen stabilen Content-Hash unabhängig von der URL liefert, dient `(gamekey, subproduct_name, platform, variant_name, filename)` als stabiler Identity-Key für den lokalen State — nicht die URL, da diese bei jedem Fetch wechselt (TTL).
+Since the API doesn't provide a stable content hash independent of the URL,
+`(gamekey, subproduct_name, platform, variant_name, filename)` serves as the
+stable identity key for local state — not the URL, since that changes on
+every fetch (TTL).
 
-Ordnerstruktur: `{dest}/{human_name}/{platform}/{filename}`, mit Sanitisierung von Dateisystem-kritischen Zeichen.
+Folder structure: `{dest}/{human_name}/{platform}/{filename}`, with
+sanitization of filesystem-hostile characters.
 
-## 5. Discovery-Flow
+## 5. Discovery Flow
 
-1. `GET /api/v1/user/order` → Liste aller `gamekey`s.
-2. Für jeden Gamekey (nebenläufig, aber gedrosselt — siehe §10): `GET /api/v1/order/{gamekey}` → vollständige Order-Details.
-3. `subproducts[].downloads[].download_struct[]` jeder Order zu einer flachen Liste von `DownloadItem`s zusammenfassen.
+1. `GET /api/v1/user/order` → list of all `gamekey`s.
+2. For each gamekey (concurrent, but throttled — see §10): `GET
+   /api/v1/order/{gamekey}` → full order details.
+3. Flatten each order's `subproducts[].downloads[].download_struct[]` into a
+   single list of `DownloadItem`s.
 
-`hbdl list` bzw. `hbdl sync --dry-run` geben diese Liste nur aus/serialisieren sie, ohne etwas herunterzuladen — nützlich, um das Tool gegen den echten Account zu testen, bevor Bytes geschrieben werden.
+`hbdl list` and `hbdl sync --dry-run` just print/serialize this list without
+downloading anything — useful for testing the tool against the real account
+before any bytes get written.
 
-## 6. Direkter Download (Queue)
+## 6. Direct Download (Queue)
 
-- **Nebenläufigkeit**: `concurrent.futures.ThreadPoolExecutor` (kein asyncio nötig — I/O-lastig, aber überschaubare Worker-Zahl, siehe §10).
-- **Resume**: HTTP-`Range`-Requests gegen eine `.part`-Sidecar-Datei; liefert der Server `200` statt `206` (Range nicht unterstützt / Datei geändert), Neustart von vorn.
-- **Retry/Backoff**: exponentielles Backoff (capped, max. ~5 Versuche) bei Verbindungsfehlern/Timeouts/5xx; `429` respektiert `Retry-After`.
-- **Integritätsprüfung**: nach Abschluss Stream-Hash (bevorzugt sha1, sonst md5) gegen API-Wert vergleichen; bei Mismatch löschen + begrenzt retryen, danach als harter Fehler in der Laufzusammenfassung melden.
-- **Idempotenz**: SQLite-State pro Identity-Key (Status `pending`/`downloading`/`verified`/`failed`); bei erneutem `hbdl sync` werden bereits `verified`-Dateien übersprungen (inkl. Stat-Check auf Disk, falls extern gelöscht).
-- **TTL-Handling**: signierte URLs sind zeitlich begrenzt. Ist `url_fetched_at` älter als ein konservativer Schwellwert (~10 min, da die exakte TTL nicht dokumentiert ist) oder liefert ein Download-Versuch 403/abgelaufene Signatur, wird die Order-Detail-Route für genau diesen Gamekey neu geladen und die URL ersetzt, bevor erneut versucht wird.
-- **Progress**: `tqdm`-Gesamtbalken (Bytes über alle Dateien) plus optionale Pro-Datei-Balken im Verbose-Modus.
+- **Concurrency**: `concurrent.futures.ThreadPoolExecutor` (no asyncio
+  needed — I/O-bound, but a manageable worker count, see §10).
+- **Resume**: HTTP `Range` requests against a `.part` sidecar file; if the
+  server returns `200` instead of `206` (range not supported / file
+  changed), restart from scratch.
+- **Retry/backoff**: exponential backoff (capped, max ~5 attempts) on
+  connection errors/timeouts/5xx; `429` respects `Retry-After`.
+- **Integrity check**: after completion, compare a streamed hash (sha1
+  preferred, else md5) against the API value; on mismatch, delete + retry a
+  limited number of times, then report as a hard failure in the run
+  summary.
+- **Idempotency**: SQLite state per identity key (status
+  `pending`/`downloading`/`verified`/`failed`); on a repeat `hbdl sync`,
+  already-`verified` files are skipped (including an on-disk stat check, in
+  case they were deleted externally).
+- **TTL handling**: signed URLs are time-limited. If `url_fetched_at` is
+  older than a conservative threshold (~10 min, since the exact TTL isn't
+  documented) or a download attempt returns 403/an expired signature, the
+  order-detail route for exactly that gamekey is refetched and the URL
+  replaced before retrying.
+- **Progress**: a `tqdm` overall bar (bytes across all files) plus optional
+  per-file bars in verbose mode.
 
-## 7. BitTorrent-Pfad
+## 7. BitTorrent Path
 
-**v1 (dieser Entwurf, umzusetzen zuerst):** Ist `torrent_url` gesetzt, lädt das Tool nur die `.torrent`-Datei selbst (klein, über denselben Direct-Download-Pfad) nach `{dest}/{...}/{filename}.torrent` herunter und informiert den Nutzer, diese mit dem eigenen Torrent-Client zu öffnen. Kein Download des eigentlichen Inhalts über BitTorrent in v1.
+**v1 (this design, to be built first):** if `torrent_url` is set, the tool
+only downloads the `.torrent` file itself (small, via the same direct-
+download path) to `{dest}/{...}/{filename}.torrent` and tells the user to
+open it with their own torrent client. No download of the actual content
+via BitTorrent in v1.
 
-Begründung: keine neuen schweren Abhängigkeiten, funktioniert auf jeder Plattform sofort, deckt den Kernwunsch ("BitTorrent als Alternative anbieten") vollständig ab, ohne Komplexität vorzuziehen, die nicht gebraucht wird.
+Rationale: no new heavy dependencies, works on every platform immediately,
+fully covers the core wish ("offer BitTorrent as an alternative") without
+pulling in complexity that isn't needed.
 
-**Spätere, optionale Ausbaustufen (nicht Teil von v1):**
-- *v1.5*: Handoff an einen lokal installierten Client (Transmission/qBittorrent) über dessen CLI/RPC, damit der `.torrent` automatisch hinzugefügt wird statt manuell geöffnet zu werden.
-- *v2*: `libtorrent`-Python-Bindings als optionales Extra (`hbdl[torrent]`) für einen vollständig eigenständigen Download-Workflow ohne externen Client — mit dem Hinweis, dass `libtorrent` eine kompilierte C++-Extension mit realer Plattform-Packaging-Problematik ist (nicht für jede Python-Version/OS/Architektur als Wheel verfügbar, insbesondere Apple Silicon), weshalb dies bewusst optional und zeitlich hinten angestellt ist.
+**Later, optional expansion stages (not part of v1):**
+- *v1.5*: hand off to a locally installed client (Transmission/qBittorrent)
+  via its CLI/RPC, so the `.torrent` gets added automatically instead of
+  opened manually.
+- *v2*: `libtorrent` Python bindings as an optional extra (`hbdl[torrent]`)
+  for a fully self-contained download workflow without an external client —
+  with the caveat that `libtorrent` is a compiled C++ extension with real
+  platform-packaging issues (not available as a wheel for every Python
+  version/OS/architecture, especially Apple Silicon), which is why this is
+  deliberately optional and pushed to later.
 
-Nicht jede Datei hat eine BitTorrent-Option (v.a. Ebooks/Audio sind meist HTTP-only, Torrents kommen vor allem bei großen Spiele-Installern vor) — die Strategie-Wahl ist daher pro Datei zu prüfen, kein globaler Modus-Schalter.
+Not every file has a BitTorrent option (ebooks/audio in particular are
+usually HTTP-only; torrents mostly show up for large game installers) — the
+strategy choice therefore needs to be checked per file, not as a global
+mode switch.
 
-## 8. Strategie-Wahl
+## 8. Strategy Choice
 
-`--strategy {auto,direct,torrent}` (Default: `auto`).
+`--strategy {auto,direct,torrent}` (default: `auto`).
 
-- `auto`: bevorzugt Torrent, wenn `torrent_url` vorhanden ist (v1: `.torrent` speichern); sonst Direct-Download. Damit ist `auto` auch in v1 sinnvoll, ohne dass der Nutzer nachdenken muss.
-- `direct`: erzwingt für alle Dateien Direct-Download, auch wenn eine Torrent-Option existiert (sinnvoll bei getaktetem/gefiltertem Netz).
-- `torrent`: erzwingt für alle Dateien mit `torrent_url` das Torrent-Verhalten; Dateien ohne Torrent-Option fallen automatisch auf Direct zurück (kein Abbruch).
+- `auto`: prefers torrent when `torrent_url` is present (v1: save the
+  `.torrent`); otherwise direct download. This makes `auto` sensible even in
+  v1, without the user needing to think about it.
+- `direct`: forces a direct download for every file, even if a torrent
+  option exists (useful on a metered/filtered network).
+- `torrent`: forces torrent behavior for every file that has a
+  `torrent_url`; files without a torrent option automatically fall back to
+  direct (no abort).
 
-Konfigurierbarer Default in `config.toml` (`default_strategy = "auto"`), per CLI-Flag überschreibbar.
+Configurable default in `config.toml` (`default_strategy = "auto"`),
+overridable via CLI flag.
 
-## 9. CLI-Oberfläche
+## 9. CLI Surface
 
-Vorschlag mit `typer`:
+Proposal using `typer`:
 
 ```
-hbdl auth login                    # geführtes Playwright-Login, speichert Cookie
-hbdl auth check                    # validiert gespeicherten/übergebenen Cookie
-hbdl list [--format table|json]    # nur Discovery, kein Download (Dry Run)
-hbdl sync                          # Hauptkommando: Discovery + Download
-  --dest PATH                      # Default ./HumbleLibrary oder Config-Default
+hbdl auth login                    # guided Playwright login, saves cookie
+hbdl auth check                    # validates the saved/passed cookie
+hbdl list [--format table|json]    # discovery only, no download (dry run)
+hbdl sync                          # main command: discovery + download
+  --dest PATH                      # default ./HumbleLibrary or config default
   --cookie-file PATH
   --cookie VALUE
-  --strategy {auto,direct,torrent} # Default auto
-  --workers N                      # Default 3
-  --platform windows,linux,ebook   # optionaler Filter
-  --product "Namens-Substring"     # optionaler Filter
-  --dry-run                        # nur Plan ausgeben, keine Writes
-  --verify-only                    # bestehende Dateien gegen Manifest neu hashen
+  --strategy {auto,direct,torrent} # default auto
+  --workers N                      # default 3
+  --platform windows,linux,ebook   # optional filter
+  --product "name substring"       # optional filter
+  --dry-run                        # print the plan only, no writes
+  --verify-only                    # re-hash existing files against the manifest
 hbdl config show / set KEY VALUE
 ```
 
-`hbdl sync` ist das eine Kommando, das die meisten Nutzer brauchen; die anderen dienen der Diagnostizierbarkeit und kontrolliertem Testen.
+`hbdl sync` is the one command most users need; the others exist for
+diagnostics and controlled testing.
 
-## 10. Fehlerbehandlung & Rate-Limiting
+## 10. Error Handling & Rate Limiting
 
-Humble Bundle ist ein reales, bezahltes Konto eines Drittanbieters — Zurückhaltung ist eine harte Design-Vorgabe, kein Nice-to-have:
+Humble Bundle is a real, paid third-party account — restraint is a hard
+design requirement, not a nice-to-have:
 
-- Default `--workers 3` sowohl für Order-Detail-Fetches während der Discovery als auch für Downloads.
-- Die Discovery-Phase (potenziell Dutzende Order-Detail-Calls) läuft über denselben gedrosselten Worker-Pool, nicht ungebremst parallel — das ist das API-Hammering-verdächtigste Traffic-Muster.
-- Globale Retry/Backoff-Policy im gemeinsamen `HttpClient`: exponentielles Backoff mit Jitter, begrenzte Versuche (~5), `Retry-After` bei 429 respektieren, Circuit-Breaker-artiger Abbruch des gesamten Laufs bei wiederholten 429/403 (lieber laut scheitern als kaputt weiterhämmern).
-- Einzelne Datei-Fehler (404, Hash-Mismatch nach Retries) brechen nicht den ganzen Lauf ab — werden gesammelt, am Ende als Zusammenfassung ausgegeben ("312 erfolgreich, 2 fehlgeschlagen: ..."); erneutes `hbdl sync` holt dank Idempotenz nur die fehlenden/fehlgeschlagenen Dateien nach.
-- Kein verstecktes Hintergrund-Scheduling — reines, manuell gestartetes CLI-Tool, kein Daemon.
+- Default `--workers 3` for both order-detail fetches during discovery and
+  downloads.
+- The discovery phase (potentially dozens of order-detail calls) runs
+  through the same throttled worker pool, not unbounded in parallel — that's
+  the most API-hammering-suspicious traffic pattern.
+- Global retry/backoff policy in the shared `HttpClient`: exponential
+  backoff with jitter, limited attempts (~5), respect `Retry-After` on 429,
+  circuit-breaker-style abort of the whole run on repeated 429/403 (better
+  to fail loudly than to keep hammering a broken account).
+- Individual file failures (404, hash mismatch after retries) don't abort
+  the whole run — they're collected and reported as a summary at the end
+  ("312 succeeded, 2 failed: ..."); a repeat `hbdl sync` only picks up the
+  missing/failed files thanks to idempotency.
+- No hidden background scheduling — a plain, manually invoked CLI tool, no
+  daemon.
 
-## 11. Vorgeschlagene Abhängigkeiten
+## 11. Proposed Dependencies
 
-- `requests` (statt `httpx`) — kein Async-Bedarf durch Thread-Pool-Modell; `requests.adapters.HTTPAdapter` + `urllib3.Retry` liefert Retry/Backoff nahezu geschenkt.
-- `typer` für die CLI (auf `click` aufbauend, typgetriebene Kommandos, gute `--help`-Ausgabe).
-- `playwright` für den geführten Login (inkl. `playwright install chromium` als einmaliger Setup-Schritt).
-- `tqdm` für Progress-Balken.
-- `platformdirs` für plattformübergreifende Config-/State-Pfade.
-- `tenacity` (optional) für deklarative Retry/Backoff-Policies statt Handrolling.
-- stdlib `http.cookiejar.MozillaCookieJar` für Netscape-Cookie-Datei-Parsing (Fallback-Pfad).
-- stdlib `sqlite3` für das State-Manifest.
-- Optionales Extra `hbdl[torrent]` → `libtorrent` (nur v2).
-- Dev/Test: `pytest`, `pytest-mock`, `responses` (HTTP-Mocking für `requests`) — Tests laufen offline gegen Fixture-JSON, nie gegen die echte API.
+- `requests` (instead of `httpx`) — no async need given the thread-pool
+  model; `requests.adapters.HTTPAdapter` + `urllib3.Retry` gets
+  retry/backoff nearly for free.
+- `typer` for the CLI (built on `click`, type-driven commands, good
+  `--help` output).
+- `playwright` for the guided login (including `playwright install
+  chromium` as a one-time setup step).
+- `tqdm` for progress bars.
+- `platformdirs` for cross-platform config/state paths.
+- `tenacity` (optional) for declarative retry/backoff policies instead of
+  hand-rolling.
+- stdlib `http.cookiejar.MozillaCookieJar` for Netscape cookie file
+  parsing (fallback path).
+- stdlib `sqlite3` for the state manifest.
+- Optional extra `hbdl[torrent]` → `libtorrent` (v2 only).
+- Dev/test: `pytest`, `pytest-mock`, `responses` (HTTP mocking for
+  `requests`) — tests run offline against fixture JSON, never against the
+  real API.
 
-## 12. Build-Meilensteine
+## 12. Build Milestones
 
-1. **M1 — Auth + Discovery** (read-only, am sichersten zuerst gegen den echten Account zu testen): `auth.py` (Playwright-Login), `api.py`, `catalog.py`, `models.py`, `hbdl auth login/check`, `hbdl list`. Ergebnis: vollständige `DownloadItem`-Liste, keine Dateischreibvorgänge.
-2. **M2 — Direct-Download-Queue**: `downloader/direct.py`, `state.py`, `progress.py`, `hbdl sync --strategy direct`. Retry/Backoff, resumierbare Range-Requests, Hash-Verifikation, idempotente Wiederholungsläufe. Kernnutzen des Tools.
-3. **M3 — TTL-/Robustheits-Härtung**: URL-Refresh bei Ablauf, Circuit-Breaker bei wiederholten 429/403, Fehlerzusammenfassung, `--verify-only` und `--dry-run`.
-4. **M4 — BitTorrent v1 (Save-only)**: `downloader/torrent.py`, `--strategy torrent/auto`-Verdrahtung in `strategy.py`.
-5. **M5 (optional, später) — Client-Handoff**: Transmission/qBittorrent-CLI-Integration.
-6. **M6 — Politur**: Config-Datei-Support, Filter (`--platform`, `--product`), Packaging (`pyproject.toml` final, `[torrent]`-Extra-Grundgerüst), README-Nutzungsdoku.
-7. **M7 (optional, später) — `libtorrent`-v2**, nur falls M4/M5 für den Bedarf nicht ausreichen.
+1. **M1 — Auth + Discovery** (read-only, safest to test against the real
+   account first): `auth.py` (Playwright login), `api.py`, `catalog.py`,
+   `models.py`, `hbdl auth login/check`, `hbdl list`. Result: a complete
+   `DownloadItem` list, no file writes.
+2. **M2 — Direct Download Queue**: `downloader/direct.py`, `state.py`,
+   `progress.py`, `hbdl sync --strategy direct`. Retry/backoff, resumable
+   range requests, hash verification, idempotent repeat runs. The tool's
+   core value.
+3. **M3 — TTL/Robustness Hardening**: URL refresh on expiry, circuit
+   breaker on repeated 429/403, error summary, `--verify-only` and
+   `--dry-run`.
+4. **M4 — BitTorrent v1 (Save-only)**: `downloader/torrent.py`,
+   `--strategy torrent/auto` wiring in `strategy.py`.
+5. **M5 (optional, later) — Client Handoff**: Transmission/qBittorrent CLI
+   integration.
+6. **M6 — Polish**: config file support, filters (`--platform`,
+   `--product`), packaging (`pyproject.toml` final, `[torrent]` extra
+   scaffold), README usage docs.
+7. **M7 (optional, later) — `libtorrent` v2**, only if M4/M5 don't cover
+   the need.
 
-Jeder Meilenstein sollte primär gegen aufgezeichnete, sanitisierte Fixture-JSONs testbar sein — echte Cookie-Tests gegen den Live-Account sollten die Ausnahme bleiben, nicht die Regel.
+Every milestone should primarily be testable against recorded, sanitized
+fixture JSON — real cookie tests against the live account should stay the
+exception, not the rule.
