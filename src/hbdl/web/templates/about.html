@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ t("about.title") }}{% endblock %}
+{% block content %}
+<h1>{{ t("about.heading") }}</h1>
+
+{% set active_tab = "about" %}
+{% include "_settings_tabs.html" %}
+
+<section class="card">
+  <h2>{{ t("about.origin_heading") }}</h2>
+  <p>
+    {{ t("about.origin_text") }}
+  </p>
+</section>
+
+<section class="card">
+  <h2>{{ t("about.contribute_heading") }}</h2>
+  <p>
+    {{ t("about.contribute_text") }}
+  </p>
+  <p>
+    <a href="https://github.com/masterdot/HumbleBundleDownloaderNG/issues" target="_blank" rel="noopener">
+      github.com/masterdot/HumbleBundleDownloaderNG/issues
+    </a>
+  </p>
+</section>
+
+<section class="card">
+  <h2>{{ t("about.outlook_heading") }}</h2>
+  <p>
+    {{ t("about.outlook_intro") }}
+  </p>
+  <ul>
+    <li><strong>Audiobookshelf</strong> {{ t("about.outlook_audiobookshelf") }}</li>
+    <li><strong>Calibre-Web</strong> {{ t("about.outlook_calibreweb") }}</li>
+    <li><strong>Jellyfin</strong> {{ t("about.outlook_jellyfin") }}</li>
+    <li>{{ t("about.outlook_games") | safe }}</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>{{ t("about.donate_heading") }}</h2>
+  <p>{{ t("about.donate_text") }}</p>
+  <p>
+    <a class="primary" href="https://github.com/sponsors/masterdot/" target="_blank" rel="noopener">
+      &#10084; github.com/sponsors/masterdot
+    </a>
+  </p>
+</section>
+{% endblock %}

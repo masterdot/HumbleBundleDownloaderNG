@@ -1,0 +1,15 @@
+<div class="column" id="col3-files">
+  {% for f in files %}
+  <div class="row">
+    {{ f.filename }}
+    <div class="meta">
+      {{ f.platform }} &middot; {{ f.variant_name }} &middot; {{ f.size_label }}
+      {% if f.has_torrent %}&middot; Torrent{% endif %}
+      &middot;
+      {% with status = f.status %}{% include "_status_badge.html" %}{% endwith %}
+    </div>
+  </div>
+  {% else %}
+  <div class="row hint">{{ t("library.no_files") }}</div>
+  {% endfor %}
+</div>

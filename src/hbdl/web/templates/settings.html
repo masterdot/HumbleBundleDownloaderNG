@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ t("settings.title") }}{% endblock %}
+{% block content %}
+<h1>{{ t("nav.settings") }}</h1>
+
+{% set active_tab = "settings" %}
+{% include "_settings_tabs.html" %}
+
+<section class="card">
+  <h2>Login</h2>
+  {% include "_login_area.html" %}
+</section>
+
+<section class="card">
+  <h2>{{ t("settings.config_heading") }}</h2>
+  {% if saved %}
+    <p><span class="badge badge-ok">{{ t("settings.saved_badge") }}</span></p>
+  {% endif %}
+  {% if error %}
+    <p><span class="badge badge-danger">{{ error }}</span></p>
+  {% endif %}
+
+  <form class="settings-form" method="post" action="/settings">
+    <div>
+      <label for="dest">{{ t("shared.dest_label") }}</label>
+      <input type="text" id="dest" name="dest" value="{{ dest }}" style="width: 100%">
+    </div>
+    <div>
+      <label for="workers">{{ t("settings.workers_label") }}</label>
+      <input type="number" id="workers" name="workers" min="1" value="{{ workers }}">
+    </div>
+    <div>
+      <label for="strategy">{{ t("settings.strategy_label") }}</label>
+      <select id="strategy" name="strategy">
+        {% for s in strategies %}
+          <option value="{{ s }}" {% if s == strategy %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="cookie_file">{{ t("settings.cookie_file_label") }}</label>
+      <input type="text" id="cookie_file" name="cookie_file" value="{{ cookie_file }}" style="width: 100%">
+    </div>
+    <div>
+      <button class="primary" type="submit">{{ t("settings.save_button") }}</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,17 @@
+<div class="columns" id="columns-root">
+  <div class="column" id="col1-bundles">
+    {% for b in bundles %}
+    <div class="row"
+         hx-get="/library/columns/subproducts?gamekey={{ b.gamekey | urlencode }}"
+         hx-target="#col2-onward"
+         hx-swap="innerHTML"
+         hx-on:click="this.parentElement.querySelectorAll('.row').forEach(r=>r.classList.remove('selected')); this.classList.add('selected')">
+      {{ b.human_name }}
+      <div class="meta">{{ t("library.file_count", n=b.item_count) }} &middot; {{ b.size_label }}</div>
+    </div>
+    {% else %}
+    <div class="row hint">{{ t("library.no_bundles_cached") }}</div>
+    {% endfor %}
+  </div>
+  <div id="col2-onward"></div>
+</div>

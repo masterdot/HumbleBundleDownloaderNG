@@ -1,0 +1,8 @@
+<div class="row" style="cursor: default;">
+  {% if ok %}
+  <span class="badge badge-ok">OK</span>
+  {% else %}
+  <span class="badge badge-danger">{{ t("sse.item_error_badge") }}</span>
+  {% endif %}
+  {{ human_name }} / {{ filename }}{% if error %} -- {{ error }}{% endif %}
+</div>

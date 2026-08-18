@@ -1,0 +1,9 @@
+{% if status == "verified" %}
+  <span class="badge badge-ok">{{ t("library.status.downloaded") }}</span>
+{% elif status == "failed" %}
+  <span class="badge badge-danger">{{ t("library.status.failed") }}</span>
+{% elif status == "downloading" %}
+  <span class="badge badge-warn">{{ t("library.status.running") }}</span>
+{% else %}
+  <span class="badge">{{ t("library.status.open") }}</span>
+{% endif %}

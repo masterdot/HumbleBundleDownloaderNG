@@ -1,0 +1,22 @@
+<div class="filter-bar" role="group" aria-label="{{ t('filter.ebooks_aria') }}">
+  <span class="hint" style="align-self:center">{{ t("filter.ebooks_label") }}</span>
+  {% for fmt in ebook_formats %}
+  <button class="filter-btn" type="button"
+          hx-get="/library/filter?variant={{ fmt | urlencode }}"
+          hx-target="#library-main" hx-swap="innerHTML">{{ fmt }}</button>
+  {% else %}
+  <span class="hint">{{ t("filter.no_ebooks_cached") }}</span>
+  {% endfor %}
+</div>
+<div class="filter-bar" role="group" aria-label="{{ t('filter.games_aria') }}">
+  <span class="hint" style="align-self:center">{{ t("filter.games_label") }}</span>
+  {% for plat in game_platforms %}
+  <button class="filter-btn" type="button"
+          hx-get="/library/filter?platform={{ plat | urlencode }}"
+          hx-target="#library-main" hx-swap="innerHTML">{{ plat }}</button>
+  {% else %}
+  <span class="hint">{{ t("filter.no_games_cached") }}</span>
+  {% endfor %}
+  <button class="filter-btn" type="button"
+          hx-get="/library/columns/root" hx-target="#library-main" hx-swap="innerHTML">{{ t("filter.all") }}</button>
+</div>

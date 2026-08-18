@@ -1,0 +1,15 @@
+<div class="column" id="col2-subproducts">
+  {% for s in subproducts %}
+  <div class="row"
+       hx-get="/library/columns/files?gamekey={{ gamekey | urlencode }}&subproduct={{ s.subproduct_name | urlencode }}"
+       hx-target="#col3-onward"
+       hx-swap="innerHTML"
+       hx-on:click="this.parentElement.querySelectorAll('.row').forEach(r=>r.classList.remove('selected')); this.classList.add('selected')">
+    {{ s.subproduct_name }}
+    <div class="meta">{{ t("library.file_count", n=s.item_count) }} &middot; {{ s.size_label }}</div>
+  </div>
+  {% else %}
+  <div class="row hint">{{ t("library.no_contents") }}</div>
+  {% endfor %}
+</div>
+<div id="col3-onward"></div>

@@ -1,0 +1,23 @@
+{% if state == "discovering" %}
+<span class="badge badge-warn">{{ t("job.discovering") }}</span>
+{% elif state == "running" %}
+<span class="badge badge-warn">{{ t("job.running", n=total_items) }}</span>
+<button class="filter-btn" type="button" hx-post="/jobs/current/pause" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.pause_button") }}</button>
+<button class="filter-btn" type="button" hx-post="/jobs/current/stop" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.stop_button") }}</button>
+{% elif state == "paused" %}
+<span class="badge badge-warn">{{ t("job.paused", n=total_items) }}</span>
+<button class="primary" type="button" hx-post="/jobs/current/resume" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.resume_button") }}</button>
+<button class="filter-btn" type="button" hx-post="/jobs/current/stop" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.stop_button") }}</button>
+{% elif state == "stopped" %}
+<span class="badge">{{ t("job.stopped") }}</span>
+<button class="primary" type="button" hx-post="/jobs/current/start" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.restart_button") }}</button>
+{% elif state == "done" %}
+<span class="badge badge-ok">{{ t("job.done") }}</span>
+<button class="primary" type="button" hx-post="/jobs/current/start" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.restart_button") }}</button>
+{% elif state == "error" %}
+<span class="badge badge-danger">{{ t("job.error", error=error) }}</span>
+<button class="primary" type="button" hx-post="/jobs/current/start" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.restart_button") }}</button>
+{% else %}
+<span class="badge">{{ t("job.ready") }}</span>
+<button class="primary" type="button" hx-post="/jobs/current/start" hx-target="#job-header" hx-swap="innerHTML">{{ t("job.start_button") }}</button>
+{% endif %}

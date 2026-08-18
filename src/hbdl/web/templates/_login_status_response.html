@@ -1,0 +1,13 @@
+{# Response for GET /auth/login/status (polled every 2s by _login_status_poll.html
+   while a login is running). While still running: re-arm just the small poll
+   div, nothing else -- must NOT touch the iframe (see _login_area.html's
+   comment on why). Once terminal (success/error): swap the poll div to empty
+   (stops further polling) and out-of-band-replace the whole #login-area with
+   the final state -- the iframe is no longer needed at that point, so
+   removing it here is fine. #}
+{% if login_status == "running" %}
+  {% include "_login_status_poll.html" %}
+{% else %}
+  <div id="login-status-poll"></div>
+  {% include "_login_area.html" %}
+{% endif %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ t("dashboard.title") }}{% endblock %}
+{% block content %}
+<h1>hbdl Dashboard</h1>
+
+<section class="card">
+  <h2>Status</h2>
+  <dl>
+    <dt>{{ t("dashboard.config_dir_label") }}</dt><dd><code>{{ config_dir }}</code></dd>
+    <dt>{{ t("dashboard.data_dir_label") }}</dt><dd><code>{{ data_dir }}</code></dd>
+    <dt>{{ t("shared.dest_label") }}</dt><dd><code>{{ dest }}</code></dd>
+    <dt>{{ t("dashboard.login_session_label") }}</dt>
+    <dd>
+      {% if session_exists %}
+        <span class="badge badge-ok">{{ t("dashboard.session_present_badge") }}</span>
+      {% else %}
+        <span class="badge badge-warn">{{ t("dashboard.session_missing_badge") }}</span> {{ t("dashboard.see_settings_prefix") }} <a href="/settings">{{ t("nav.settings") }}</a>
+      {% endif %}
+    </dd>
+  </dl>
+</section>
+
+<section class="card" hx-ext="sse" sse-connect="/jobs/current/events">
+  <h2>{{ t("dashboard.sync_job_heading") }}</h2>
+  <div id="job-header" sse-swap="state">
+    {% include "_sse_state.html" %}
+  </div>
+  <p><strong>{{ t("dashboard.progress_label") }}</strong> <span id="job-bytes" sse-swap="bytes">0 MB</span></p>
+  <div id="job-log" sse-swap="item_done" hx-swap="beforeend"
+       style="max-height: 240px; overflow-y: auto; margin-top: 0.5rem;"></div>
+  <p class="hint">{{ t("dashboard.pause_stop_hint") }}</p>
+</section>
+{% endblock %}

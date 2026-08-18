@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ t("library.title") }}{% endblock %}
+{% block content %}
+<h1>{{ t("nav.library") }}</h1>
+
+{% if empty_catalog %}
+<section class="card">
+  <p class="hint">
+    {{ t("library.empty_catalog_message") | safe }}
+  </p>
+</section>
+{% endif %}
+
+<div style="margin-bottom: 1rem;">
+  <input type="search" name="q" placeholder="{{ t('library.search_placeholder') }}" style="width: 100%; max-width: 480px;"
+         hx-get="/library/search" hx-trigger="keyup changed delay:300ms, search" hx-target="#library-main" hx-swap="innerHTML" hx-include="this">
+</div>
+
+{% include "_filter_bar.html" %}
+
+<div id="library-main">
+  {% include "_columns_root.html" %}
+</div>
+{% endblock %}

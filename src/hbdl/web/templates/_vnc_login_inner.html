@@ -1,0 +1,27 @@
+{% if login_status == "running" %}
+  <p class="hint">
+    {{ t("login.vnc_starting_hint") }}
+  </p>
+  <!-- The iframe is only ever created here, once, when this block first
+       renders (start button click). The status poll below swaps only itself
+       every 2s -- NOT this iframe -- otherwise the VNC connection gets torn
+       down and reconnected every poll tick. See CONCEPT_WEB.md's M13 entries. -->
+  <!-- Served same-origin through /vnc (web/routers/vnc_proxy.py) instead of
+       a separate port -- that's what makes Cmd/Ctrl+V inside the window
+       itself work (see docker/novnc-clipboard-autopaste.js): browsers
+       silently refuse the Clipboard API from a cross-origin iframe, which a
+       separate :6080 origin used to be. `path=websockify` is relative to
+       this document (/vnc/hbdl-vnc.html), so noVNC's own WebSocket connect
+       resolves to /vnc/websockify -- see web/routers/vnc_proxy.py's
+       websocket route and CONCEPT_WEB.md for how this was verified against
+       noVNC's app/ui.js. -->
+  <iframe id="vnc-frame" title="{{ t('login.vnc_iframe_title') }}" allow="clipboard-read; clipboard-write"
+          src="/vnc/hbdl-vnc.html?path=websockify&amp;autoconnect=true&amp;resize=scale"
+          style="width:100%; height:520px; border:1px solid var(--border); border-radius:8px;"></iframe>
+  <p class="hint">
+    {{ t("login.vnc_instructions") }}
+  </p>
+  {% include "_login_status_poll.html" %}
+{% else %}
+  <button class="filter-btn" type="button" hx-post="/auth/login/start" hx-target="#vnc-login-inner" hx-swap="innerHTML">{{ t("login.vnc_start_button") }}</button>
+{% endif %}

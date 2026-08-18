@@ -1,0 +1,1 @@
+{% if total and total > 0 %}{{ "%.1f"|format(done / 1048576) }} MB / {{ "%.1f"|format(total / 1048576) }} MB ({{ (done / total * 100) | round(1) }}%){% else %}0 MB{% endif %}

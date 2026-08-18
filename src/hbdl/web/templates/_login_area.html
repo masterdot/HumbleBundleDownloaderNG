@@ -1,0 +1,38 @@
+<div id="login-area"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if login_status == "success" %}
+    <p><span class="badge badge-ok">{{ t("login.status_ok") }}</span></p>
+  {% elif login_status == "error" %}
+    <p><span class="badge badge-danger">{{ t("login.last_attempt_failed", error=login_error) }}</span></p>
+  {% else %}
+    <p><span class="badge">{{ t("login.status_none") }}</span></p>
+  {% endif %}
+
+  <section class="card">
+    <h3 style="margin-top:0;">{{ t("login.embedded_heading") }}</h3>
+    <p class="hint">
+      {{ t("login.embedded_hint") }}
+    </p>
+    <div id="vnc-login-inner">
+      {% include "_vnc_login_inner.html" %}
+    </div>
+  </section>
+
+  <details style="margin-top:0.75rem;">
+    <summary>{{ t("login.cli_alt_summary") }}</summary>
+    <p class="hint" style="margin-top:0.75rem;">
+      {{ t("login.cli_alt_hint") }}
+    </p>
+    <pre><code>./docker/login-locally.sh</code></pre>
+    <p class="hint">{{ t("login.cli_alt_reload_hint") }}</p>
+  </details>
+
+  <details style="margin-top:0.75rem;">
+    <summary>{{ t("login.cookie_alt_summary") }}</summary>
+    <form class="settings-form" method="post" action="/auth/cookie"
+          hx-post="/auth/cookie" hx-target="#login-area" hx-swap="outerHTML" style="margin-top:0.75rem;">
+      <label for="cookie">{{ t("login.cookie_label") }}</label>
+      <input type="text" id="cookie" name="cookie" placeholder="{{ t('login.cookie_placeholder') }}">
+      <button class="filter-btn" type="submit">{{ t("login.cookie_save_button") }}</button>
+    </form>
+  </details>
+</div>
