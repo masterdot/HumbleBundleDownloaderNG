@@ -742,22 +742,25 @@ Calibre-Web, Jellyfin, still-open games solution).
   pass -- `pytest` has no opinion on spelling. Fixed catalog-wide; two
   tests that had baked the old ASCII spelling into their assertions
   (`"Laeuft (3 Dateien)"`) updated to match.
-- **Font hosting**: `IBM Plex Mono`/`IBM Plex Sans` are loaded from
-  Google Fonts via `<link>` in `base.html`, not vendored locally like
-  htmx/Alpine.js. Self-hosting was the first choice (matches this
-  project's "vendor everything, no CDN" pattern for htmx/Alpine), but the
-  dev sandbox this was built in could resolve `fonts.googleapis.com`
-  (the CSS) yet not `fonts.gstatic.com` (the actual `.woff2` files) --
-  environment-specific DNS/allowlist restriction, not a property of the
-  real deployment (which already makes live HTTPS calls to
-  humblebundle.com and downloads Playwright Chromium at build time, so it
-  clearly has general internet access). The `<link>` degrades gracefully
-  either way: every font-family declaration keeps a real fallback stack
-  (`monospace` / the existing system-sans stack), so a blocked or offline
-  self-hosted deployment still renders correctly, just without the
-  specific typeface. Worth revisiting -- self-host the four `.woff2`
-  files into `web/static/fonts/` -- if that turns out to matter for a
-  real fully-offline deployment.
+- **Font hosting**: `IBM Plex Mono`/`IBM Plex Sans` are vendored locally
+  into `web/static/fonts/` (four `.woff2` files, ~91KB total,
+  latin-subset-only -- covers German umlauts, U+0000-00FF), matching
+  htmx/Alpine.js's existing vendoring, not loaded from Google Fonts via
+  `<link>`. First attempt at this hit a dead end: the dev sandbox this
+  was built in could resolve `fonts.googleapis.com` (the CSS) but not
+  `fonts.gstatic.com` (the actual font files), so the milestone shipped
+  with the CDN `<link>` and a note to revisit -- confirmed shortly after
+  to be a transient/environment-specific DNS hiccup, not a real
+  constraint (retried minutes later, resolved fine), so the vendoring was
+  finished right away rather than staying a follow-up. `IBM Plex Sans`
+  ships from Google as a single variable-font file covering the whole
+  400-600 weight range -- vendored as one `@font-face` with a
+  `font-weight: 400 600` range rather than three duplicate declarations
+  pointing at the same bytes; `IBM Plex Mono` is static, one file per
+  weight. Verified with Playwright: `document.fonts.check(...)` true for
+  both families and zero non-127.0.0.1 network requests on page load.
+  Every font-family declaration still keeps a real fallback stack
+  (`monospace` / the existing system-sans stack) regardless.
 - **Verification**: full `pytest` run green throughout; visual
   verification via a real `hbdl web serve` process plus Playwright
   screenshots of all four top-level pages in both languages (not just

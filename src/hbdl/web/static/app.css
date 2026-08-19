@@ -1,3 +1,40 @@
+/* Vendored locally (see /static/fonts/) rather than loaded from Google
+   Fonts, matching htmx/Alpine.js's vendoring below -- no CDN dependency
+   for a self-hosted deployment. Latin-subset-only (covers German umlauts,
+   U+0000-00FF), same as what the Google Fonts CSS would have served for
+   this app's DE/EN content. IBM Plex Sans ships as a single variable-font
+   file across the whole 400-600 weight range (one @font-face with a
+   weight range, not three duplicate declarations); IBM Plex Mono is
+   static, one file per weight. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-mono-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-var.woff2") format("woff2");
+}
+
 :root {
   --bg: oklch(20% 0.015 60);
   --panel: oklch(24% 0.015 60);

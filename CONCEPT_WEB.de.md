@@ -681,24 +681,28 @@ Spiele-Loesung).
   `pytest` hat keine Meinung zu Rechtschreibung. Katalogweit gefixt; zwei
   Tests, die die alte ASCII-Schreibweise in ihre Assertions eingebacken
   hatten (`"Laeuft (3 Dateien)"`), angepasst.
-- **Font-Hosting**: `IBM Plex Mono`/`IBM Plex Sans` werden per
-  `<link>` in `base.html` von Google Fonts geladen, nicht wie htmx/
-  Alpine.js lokal vendored. Selbst-Hosting war die erste Wahl (passt zum
-  "alles vendoren, kein CDN"-Muster dieses Projekts fuer htmx/Alpine),
-  aber die Dev-Sandbox, in der das gebaut wurde, konnte
-  `fonts.googleapis.com` (das CSS) aufloesen, `fonts.gstatic.com` (die
-  eigentlichen `.woff2`-Dateien) aber nicht -- eine umgebungsspezifische
-  DNS-/Allowlist-Einschraenkung, keine Eigenschaft des echten Deployments
-  (das schon jetzt Live-HTTPS-Calls an humblebundle.com macht und beim
-  Build Playwright-Chromium herunterlaedt, hat also klar generellen
-  Internetzugang). Der `<link>` degradiert so oder so sauber: jede
-  Font-Family-Deklaration behaelt einen echten Fallback-Stack
-  (`monospace` bzw. den bestehenden System-Sans-Stack), ein blockiertes
-  oder offline selbst-gehostetes Deployment rendert also weiterhin
-  korrekt, nur ohne die konkrete Schriftart. Lohnt sich zu ueberdenken --
-  die vier `.woff2`-Dateien nach `web/static/fonts/` selbst hosten --
-  falls das fuer ein echtes, vollstaendig offline laufendes Deployment
-  mal relevant wird.
+- **Font-Hosting**: `IBM Plex Mono`/`IBM Plex Sans` sind jetzt lokal nach
+  `web/static/fonts/` vendored (vier `.woff2`-Dateien, ~91KB insgesamt,
+  nur Latin-Subset -- deckt deutsche Umlaute ab, U+0000-00FF), passend zum
+  bestehenden Vendoring von htmx/Alpine.js, nicht per `<link>` von Google
+  Fonts geladen. Der erste Versuch dazu lief in eine Sackgasse: die
+  Dev-Sandbox, in der das gebaut wurde, konnte `fonts.googleapis.com`
+  (das CSS) aufloesen, `fonts.gstatic.com` (die eigentlichen
+  Font-Dateien) aber nicht, also ging der Meilenstein zunaechst mit dem
+  CDN-`<link>` und einem Nachtrags-Vermerk raus -- kurz danach bestaetigt,
+  dass das ein voruebergehender/umgebungsspezifischer DNS-Ausfall war,
+  keine echte Einschraenkung (Minuten spaeter erneut versucht, loeste
+  sauber auf), also wurde das Vendoring gleich fertiggestellt statt als
+  Nacharbeit liegen zu bleiben. `IBM Plex Sans` liefert Google als eine
+  einzelne Variable-Font-Datei ueber den gesamten 400-600-Gewichtsbereich
+  -- als ein `@font-face` mit `font-weight: 400 600`-Bereich vendored
+  statt drei doppelter Deklarationen, die auf dieselben Bytes zeigen;
+  `IBM Plex Mono` ist statisch, eine Datei pro Gewicht. Mit Playwright
+  verifiziert: `document.fonts.check(...)` liefert fuer beide Familien
+  true, null Netzwerk-Requests auf etwas anderes als 127.0.0.1 beim
+  Seitenaufbau. Jede Font-Family-Deklaration behaelt trotzdem einen
+  echten Fallback-Stack (`monospace` bzw. den bestehenden
+  System-Sans-Stack).
 - **Verifikation**: durchgehend gruener `pytest`-Lauf; visuelle
   Verifikation ueber einen echten `hbdl web serve`-Prozess plus
   Playwright-Screenshots aller vier Top-Level-Seiten in beiden Sprachen
