@@ -299,10 +299,6 @@ CATALOG: dict[str, dict[str, str]] = {
     "dashboard.see_settings_prefix": {"de": "-- siehe", "en": "-- see"},
     "dashboard.sync_job_heading": {"de": "Sync-Job", "en": "Sync job"},
     "dashboard.progress_label": {"de": "Fortschritt:", "en": "Progress:"},
-    "dashboard.pause_stop_hint": {
-        "de": "Pause/Stop landen in einem spaeteren Ausbauschritt (M12).",
-        "en": "Pause/stop are coming in a later milestone (M12).",
-    },
     "about.title": {"de": "Über & Spenden - hbdl", "en": "About & Donate - hbdl"},
     "about.heading": {"de": "Über hbdl", "en": "About hbdl"},
     "about.origin_heading": {"de": "Entstehungsgeschichte", "en": "Origin story"},
