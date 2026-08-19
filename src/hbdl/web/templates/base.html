@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}hbdl{% endblock %}</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/htmx-sse.js" defer></script>
@@ -17,6 +18,11 @@
       <a href="/library">{{ t("nav.library") }}</a>
       <a href="/settings">{{ t("nav.settings") }}</a>
     </nav>
+    <form method="post" action="/settings/lang" class="lang-toggle">
+      {% for l in ("de", "en") %}
+        <button type="submit" name="lang" value="{{ l }}" {% if lang() == l %}class="active"{% endif %}>{{ l | upper }}</button>
+      {% endfor %}
+    </form>
   </header>
   <main>
     {% block content %}{% endblock %}

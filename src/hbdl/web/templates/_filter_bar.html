@@ -3,7 +3,7 @@
   {% for fmt in ebook_formats %}
   <button class="filter-btn" type="button"
           hx-get="/library/filter?variant={{ fmt | urlencode }}"
-          hx-target="#library-main" hx-swap="innerHTML">{{ fmt }}</button>
+          hx-target="#library-main" hx-swap="innerHTML">--{{ fmt }}</button>
   {% else %}
   <span class="hint">{{ t("filter.no_ebooks_cached") }}</span>
   {% endfor %}
@@ -13,10 +13,10 @@
   {% for plat in game_platforms %}
   <button class="filter-btn" type="button"
           hx-get="/library/filter?platform={{ plat | urlencode }}"
-          hx-target="#library-main" hx-swap="innerHTML">{{ plat }}</button>
+          hx-target="#library-main" hx-swap="innerHTML">--{{ plat }}</button>
   {% else %}
   <span class="hint">{{ t("filter.no_games_cached") }}</span>
   {% endfor %}
   <button class="filter-btn" type="button"
-          hx-get="/library/columns/root" hx-target="#library-main" hx-swap="innerHTML">{{ t("filter.all") }}</button>
+          hx-get="/library/columns/root" hx-target="#library-main" hx-swap="innerHTML">--{{ t("filter.all") }}</button>
 </div>

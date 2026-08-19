@@ -25,8 +25,8 @@
   <div id="job-header" sse-swap="state">
     {% include "_sse_state.html" %}
   </div>
-  <p><strong>{{ t("dashboard.progress_label") }}</strong> <span id="job-bytes" sse-swap="bytes">0 MB</span></p>
-  <div id="job-log" sse-swap="item_done" hx-swap="beforeend"
-       style="max-height: 240px; overflow-y: auto; margin-top: 0.5rem;"></div>
+  <div id="job-bytes" sse-swap="bytes">0 MB</div>
+  <div id="job-log" class="job-log" sse-swap="item_done" hx-swap="beforeend"
+       style="max-height: 240px; overflow-y: auto;"></div>
 </section>
 {% endblock %}

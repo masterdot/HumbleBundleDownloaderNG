@@ -52,6 +52,10 @@ built.
 - **M14** — i18n: DE/EN language switching for the CLI + web UI,
   bilingual core docs (README, CONCEPT.md, CONCEPT_WEB.md). ✅ done
 - **M15** — Compose hardening (WAL, lock file), README Docker section.
+- **M16** — UI redesign ("Operator Console"): dark, monospace-accented visual
+  system across all 18 templates + `app.css`, explored as a Claude Design
+  canvas first; language switcher (topbar toggle + settings form) actually
+  wired up. ✅ done
 
 ## Decision Log
 
@@ -670,3 +674,96 @@ Calibre-Web, Jellyfin, still-open games solution).
 - **Confirmed working end-to-end by the user** in a real browser: a single
   Cmd/Ctrl+V in the embedded login window now pastes the current host
   clipboard content.
+
+### 2026-08-19 – M16 done: UI redesign ("Operator Console")
+
+- **Design-canvas-first workflow**: the current 1:1 recreation of the UI
+  (published as an editable Claude Design canvas at the start of M14/M16
+  work) was extended with three genuinely different visual directions for
+  the dashboard screen only ("Reading Room" -- warm/serif, "Operator
+  Console" -- dark/monospace/technical, "Field Notes" -- light/editorial),
+  deliberately avoiding known AI-slop defaults (warm cream + serif +
+  terracotta; near-black + a lone neon accent; broadsheet hairlines). The
+  user picked **Operator Console** after seeing all three side by side.
+  Only after that decision was the direction built out across all 7
+  screens on the canvas, and only after *that* was it re-implemented in
+  the real Jinja2 templates -- direction first, full build second, real
+  code third.
+- **Real re-implementation, not a copy-paste of the mockup markup**: the
+  canvas artboards are static `.dc.html`, so every dynamic binding (Jinja
+  loops/conditionals, `i18n.t()` calls, htmx polling/swap targets, SSE
+  swap ids, form actions) had to be reattached by hand across `app.css`
+  and all 18 templates. Token system: oklch-defined dark palette (warm
+  charcoal `--bg`/`--panel`, muted amber `--accent`), IBM Plex Mono for
+  headings/labels/nav/buttons, IBM Plex Sans for body text, loaded via a
+  Google Fonts `<link>` in `base.html` (see font-hosting note below).
+- **Kept the existing `.badge`/`.card`/`.filter-btn`/`.columns` class
+  vocabulary unchanged** -- almost the entire re-skin is new CSS against
+  the same class names the templates already used, not a markup rewrite.
+  The one CSS trick worth noting: the small colored "status dot" on every
+  badge is a `::before` pseudo-element in `currentColor`, not a `<span>` --
+  zero template changes needed for it to show up everywhere a `.badge` is
+  used.
+- **Scope decision: kept the proven 3-`<details>` login structure**,
+  restyled but NOT restructured into the tabbed layout the canvas
+  exploration had proposed for that one screen. The tab idea was
+  explicitly flagged as "discussion basis, not final" on the canvas
+  itself, and the login area has a long, hard-won bug history (the M13
+  VNC-iframe-reload bug, three clipboard-fix attempts) -- reskinning a
+  proven structure is a much smaller blast radius than re-architecting
+  its interaction model in the same pass. The VNC iframe itself gained a
+  purely decorative `.window-frame`/`.window-titlebar` wrapper (a small
+  fake browser-chrome bar) with zero change to the iframe's `id`, `src`,
+  or the polling markup around it.
+- **Closed a real gap found while building this**: M14's plan called for
+  both a topbar DE/EN toggle and a full settings-form language select,
+  but only the underlying mechanism (`Config.lang`, `i18n.set_lang()`,
+  `hbdl config set lang`) had actually shipped -- there was no UI control
+  to switch language at all. Both pieces are now real: `POST
+  /settings/lang` (topbar quick-toggle, plain form POST so it's a full
+  page reload -- an htmx partial swap would leave the rest of the page's
+  copy in the old language) and a `--lang` field on the full settings
+  form (`POST /settings`, validated against `config.LANGUAGES` the same
+  way `strategy` already was).
+- **Real bug hit while wiring the language toggle**: the settings
+  route's context dict used the key `"lang"` for the current language
+  value, which silently shadowed the `lang()` Jinja global (registered
+  in `create_app()` for `<html lang="...">` and the topbar) inside any
+  template that extends `base.html` -- `TypeError: 'str' object is not
+  callable` on every settings-page render. Renamed the context key to
+  `current_lang`; `lang()` stays reserved for the global.
+- **A second, unrelated but real find while reviewing the redesign
+  end-to-end**: the DE catalog in `src/hbdl/i18n/strings.py` -- from M14,
+  not this milestone -- turned out to have the *same* ASCII-umlaut-
+  substitute problem (`fuer`/`ueber`/`Loesung`/... instead of
+  `für`/`über`/`Lösung`) throughout, well beyond the handful already
+  fixed on the design canvas. Only surfaced visually, via a Playwright
+  screenshot of the About page during this milestone's own verification
+  pass -- `pytest` has no opinion on spelling. Fixed catalog-wide; two
+  tests that had baked the old ASCII spelling into their assertions
+  (`"Laeuft (3 Dateien)"`) updated to match.
+- **Font hosting**: `IBM Plex Mono`/`IBM Plex Sans` are loaded from
+  Google Fonts via `<link>` in `base.html`, not vendored locally like
+  htmx/Alpine.js. Self-hosting was the first choice (matches this
+  project's "vendor everything, no CDN" pattern for htmx/Alpine), but the
+  dev sandbox this was built in could resolve `fonts.googleapis.com`
+  (the CSS) yet not `fonts.gstatic.com` (the actual `.woff2` files) --
+  environment-specific DNS/allowlist restriction, not a property of the
+  real deployment (which already makes live HTTPS calls to
+  humblebundle.com and downloads Playwright Chromium at build time, so it
+  clearly has general internet access). The `<link>` degrades gracefully
+  either way: every font-family declaration keeps a real fallback stack
+  (`monospace` / the existing system-sans stack), so a blocked or offline
+  self-hosted deployment still renders correctly, just without the
+  specific typeface. Worth revisiting -- self-host the four `.woff2`
+  files into `web/static/fonts/` -- if that turns out to matter for a
+  real fully-offline deployment.
+- **Verification**: full `pytest` run green throughout; visual
+  verification via a real `hbdl web serve` process plus Playwright
+  screenshots of all four top-level pages in both languages (not just
+  `TestClient` response bodies) -- caught both the umlaut regression
+  above and, earlier in the same pass, a stale dev-server process serving
+  pre-fix code after a `kill %1` that silently no-panned across separate
+  shell invocations (no job-table entry for that PID in the new shell) --
+  `lsof -i :PORT` confirmed the actual bound process before trusting any
+  subsequent screenshot.

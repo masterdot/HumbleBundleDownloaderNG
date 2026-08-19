@@ -1,1 +1,9 @@
-{% if total and total > 0 %}{{ "%.1f"|format(done / 1048576) }} MB / {{ "%.1f"|format(total / 1048576) }} MB ({{ (done / total * 100) | round(1) }}%){% else %}0 MB{% endif %}
+{% if total and total > 0 %}
+<div class="progress-track"><div class="progress-fill" style="width: {{ (done / total * 100) | round(1) }}%"></div></div>
+<div class="progress-label">
+  <span>{{ "%.1f"|format(done / 1048576) }} MB / {{ "%.1f"|format(total / 1048576) }} MB</span>
+  <span>{{ (done / total * 100) | round(1) }}%</span>
+</div>
+{% else %}
+0 MB
+{% endif %}

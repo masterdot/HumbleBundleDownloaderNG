@@ -44,6 +44,10 @@ Implementierungsplan; wird hier bei Bedarf vertieft, sobald einzelne Teile umges
 - **M14** — i18n: DE/EN-Sprachumschaltung fuer CLI + Web-UI, zweisprachige
   Kern-Docs (README, CONCEPT.md, CONCEPT_WEB.md). ✅ erledigt
 - **M15** — Compose-Härtung (WAL, Lock-Datei), README-Docker-Abschnitt.
+- **M16** — UI-Redesign ("Operator Console"): dunkles, monospace-akzentuiertes
+  visuelles System über alle 18 Templates + `app.css`, vorab als
+  Claude-Design-Canvas erkundet; Sprachumschaltung (Topbar-Toggle +
+  Settings-Formular) tatsächlich verdrahtet. ✅ erledigt
 
 ## Entscheidungsprotokoll
 
@@ -604,3 +608,105 @@ Spiele-Loesung).
 - **Vom Nutzer end-to-end in einem echten Browser bestaetigt**: ein
   einzelnes Cmd/Strg+V im eingebetteten Login-Fenster fuegt jetzt den
   aktuellen Host-Zwischenablage-Inhalt ein.
+
+### 2026-08-19 – M16 abgeschlossen: UI-Redesign ("Operator Console")
+
+- **Design-Canvas-first-Workflow**: die 1:1-Nachbildung der aktuellen UI
+  (zu Beginn der M14/M16-Arbeit als editierbarer Claude-Design-Canvas
+  veroeffentlicht) wurde um drei wirklich unterschiedliche visuelle
+  Richtungen fuer nur das Dashboard erweitert ("Reading Room" -- warm/
+  Serife, "Operator Console" -- dunkel/monospace/technisch, "Field Notes"
+  -- hell/editorial), bewusst unter Vermeidung bekannter KI-Slop-Defaults
+  (warmes Creme + Serife + Terracotta; Near-Black + einzelner Neon-Akzent;
+  Broadsheet-Hairlines). Der Nutzer hat sich nach dem Nebeneinander-
+  Vergleich fuer **Operator Console** entschieden. Erst nach dieser
+  Entscheidung wurde die Richtung auf alle 7 Screens im Canvas ausgebaut,
+  und erst danach in die echten Jinja2-Templates zurueckgefuehrt --
+  Richtung zuerst, voller Canvas-Ausbau zweitens, echter Code drittens.
+- **Echte Rueckfuehrung, keine Kopie des Mockup-Markups**: die Canvas-
+  Artboards sind statisches `.dc.html`, jede dynamische Bindung (Jinja-
+  Loops/-Conditionals, `i18n.t()`-Aufrufe, htmx-Polling-/Swap-Ziele,
+  SSE-Swap-IDs, Formular-Actions) musste von Hand in `app.css` und allen
+  18 Templates wieder angeschlossen werden. Token-System: oklch-definierte
+  dunkle Palette (warmes Anthrazit `--bg`/`--panel`, gedecktes Amber
+  `--accent`), IBM Plex Mono fuer Ueberschriften/Labels/Nav/Buttons, IBM
+  Plex Sans fuer Fliesstext, geladen ueber einen Google-Fonts-`<link>` in
+  `base.html` (siehe Font-Hosting-Hinweis unten).
+- **Bestehendes `.badge`/`.card`/`.filter-btn`/`.columns`-Klassenvokabular
+  unveraendert beibehalten** -- fast das gesamte Reskin ist neues CSS
+  gegen dieselben Klassennamen, die die Templates bereits nutzten, kein
+  Markup-Rewrite. Ein CSS-Kniff, der sich lohnt zu erwaehnen: der kleine
+  farbige "Status-Punkt" auf jedem Badge ist ein `::before`-Pseudo-Element
+  in `currentColor`, kein `<span>` -- null Template-Aenderungen noetig,
+  damit er ueberall erscheint, wo `.badge` verwendet wird.
+- **Scope-Entscheidung: die bewaehrte 3-`<details>`-Login-Struktur
+  beibehalten**, umgestylt aber NICHT in das im Canvas vorgeschlagene
+  Tab-Layout umgebaut. Die Tab-Idee war auf dem Canvas selbst
+  ausdruecklich als "Diskussionsgrundlage, nicht final" markiert, und der
+  Login-Bereich hat eine lange, hart erarbeitete Bug-Historie (der
+  M13-VNC-iframe-Reload-Bug, drei Clipboard-Fix-Versuche) -- ein
+  bewaehrtes Struktur nur umzustylen hat einen deutlich kleineren
+  Explosionsradius als ihr Interaktionsmodell im selben Schritt
+  umzubauen. Der VNC-iframe selbst bekam einen rein dekorativen
+  `.window-frame`/`.window-titlebar`-Wrapper (eine kleine
+  Fake-Browser-Chrome-Leiste) ohne jede Aenderung an der `id`, `src` oder
+  dem Polling-Markup drumherum.
+- **Eine echte Luecke geschlossen, die beim Bauen auffiel**: M14s Plan sah
+  sowohl einen Topbar-DE/EN-Toggle als auch ein volles Sprache-Select im
+  Settings-Formular vor, aber nur der zugrundeliegende Mechanismus
+  (`Config.lang`, `i18n.set_lang()`, `hbdl config set lang`) war
+  tatsaechlich ausgeliefert worden -- es gab ueberhaupt kein UI-Element
+  zum Umschalten. Beide Teile sind jetzt real: `POST /settings/lang`
+  (Topbar-Schnell-Toggle, schlichter Formular-POST, damit es ein echter
+  Full-Page-Reload ist -- ein htmx-Partial-Swap wuerde den Rest der Seite
+  in der alten Sprache haengen lassen) und ein `--lang`-Feld im vollen
+  Settings-Formular (`POST /settings`, validiert gegen `config.LANGUAGES`
+  genau wie schon `strategy`).
+- **Echter Bug beim Verdrahten des Sprach-Toggles gefunden**: der
+  Context-Dict der Settings-Route nutzte den Key `"lang"` fuer den
+  aktuellen Sprachwert, was die Jinja-Global-Funktion `lang()`
+  (registriert in `create_app()` fuer `<html lang="...">` und die Topbar)
+  in jedem Template, das `base.html` erweitert, stillschweigend
+  ueberschrieb -- `TypeError: 'str' object is not callable` bei jedem
+  Settings-Seiten-Render. Context-Key auf `current_lang` umbenannt;
+  `lang()` bleibt fuer die Global reserviert.
+- **Ein zweiter, unabhaengiger aber echter Fund bei der End-to-End-
+  Durchsicht des Redesigns**: der DE-Katalog in `src/hbdl/i18n/
+  strings.py` -- aus M14, nicht aus diesem Meilenstein -- hatte
+  durchgehend dasselbe ASCII-Umlaut-Ersatzproblem
+  (`fuer`/`ueber`/`Loesung`/... statt `für`/`über`/`Lösung`), weit ueber
+  die Handvoll hinaus, die schon auf dem Design-Canvas gefixt worden
+  waren. Erst visuell aufgefallen, ueber einen Playwright-Screenshot der
+  Über-Seite waehrend der eigenen Verifikation dieses Meilensteins --
+  `pytest` hat keine Meinung zu Rechtschreibung. Katalogweit gefixt; zwei
+  Tests, die die alte ASCII-Schreibweise in ihre Assertions eingebacken
+  hatten (`"Laeuft (3 Dateien)"`), angepasst.
+- **Font-Hosting**: `IBM Plex Mono`/`IBM Plex Sans` werden per
+  `<link>` in `base.html` von Google Fonts geladen, nicht wie htmx/
+  Alpine.js lokal vendored. Selbst-Hosting war die erste Wahl (passt zum
+  "alles vendoren, kein CDN"-Muster dieses Projekts fuer htmx/Alpine),
+  aber die Dev-Sandbox, in der das gebaut wurde, konnte
+  `fonts.googleapis.com` (das CSS) aufloesen, `fonts.gstatic.com` (die
+  eigentlichen `.woff2`-Dateien) aber nicht -- eine umgebungsspezifische
+  DNS-/Allowlist-Einschraenkung, keine Eigenschaft des echten Deployments
+  (das schon jetzt Live-HTTPS-Calls an humblebundle.com macht und beim
+  Build Playwright-Chromium herunterlaedt, hat also klar generellen
+  Internetzugang). Der `<link>` degradiert so oder so sauber: jede
+  Font-Family-Deklaration behaelt einen echten Fallback-Stack
+  (`monospace` bzw. den bestehenden System-Sans-Stack), ein blockiertes
+  oder offline selbst-gehostetes Deployment rendert also weiterhin
+  korrekt, nur ohne die konkrete Schriftart. Lohnt sich zu ueberdenken --
+  die vier `.woff2`-Dateien nach `web/static/fonts/` selbst hosten --
+  falls das fuer ein echtes, vollstaendig offline laufendes Deployment
+  mal relevant wird.
+- **Verifikation**: durchgehend gruener `pytest`-Lauf; visuelle
+  Verifikation ueber einen echten `hbdl web serve`-Prozess plus
+  Playwright-Screenshots aller vier Top-Level-Seiten in beiden Sprachen
+  (nicht nur `TestClient`-Response-Bodies) -- hat sowohl die
+  Umlaut-Regression oben aufgedeckt als auch, frueher im selben Durchgang,
+  einen veralteten Dev-Server-Prozess, der nach einem `kill %1` (das ueber
+  getrennte Shell-Aufrufe hinweg lautlos ins Leere lief -- kein
+  Job-Tabellen-Eintrag fuer diese PID in der neuen Shell) weiterhin
+  vorgefixten Code auslieferte -- `lsof -i :PORT` hat den tatsaechlich
+  gebundenen Prozess bestaetigt, bevor irgendeinem weiteren Screenshot
+  vertraut wurde.

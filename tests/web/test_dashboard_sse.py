@@ -183,7 +183,7 @@ def test_pause_and_resume_via_routes_reflect_running_and_paused_state(monkeypatc
 
     release.set()
     resume_resp = client.post("/jobs/current/resume")
-    assert "Laeuft" in resume_resp.text or "Fertig" in resume_resp.text
+    assert "Läuft" in resume_resp.text or "Fertig" in resume_resp.text
 
     _wait_until_idle(app)
     final = client.get("/")
@@ -218,4 +218,4 @@ def test_sse_stream_delivers_published_event(monkeypatch, tmp_path):
     chunk = asyncio.run(pull_one_chunk())
 
     assert chunk.startswith("event: state\n")
-    assert "Laeuft (3 Dateien)" in chunk
+    assert "Läuft (3 Dateien)" in chunk

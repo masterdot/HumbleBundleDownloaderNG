@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from hbdl import config
+from hbdl import config, i18n
 from hbdl.web.app import create_app
 
 
@@ -87,7 +87,7 @@ def test_settings_post_persists_and_reflects_new_values(monkeypatch, tmp_path):
     client = TestClient(create_app())
     resp = client.post(
         "/settings",
-        data={"dest": new_dest, "workers": "6", "strategy": "torrent", "cookie_file": ""},
+        data={"dest": new_dest, "workers": "6", "strategy": "torrent", "lang": "de", "cookie_file": ""},
     )
 
     assert resp.status_code == 200
@@ -96,6 +96,7 @@ def test_settings_post_persists_and_reflects_new_values(monkeypatch, tmp_path):
     assert str(reloaded.dest) == new_dest
     assert reloaded.workers == 6
     assert reloaded.strategy == "torrent"
+    assert reloaded.lang == "de"
 
 
 def test_settings_post_rejects_unknown_strategy(monkeypatch, tmp_path):
@@ -105,8 +106,38 @@ def test_settings_post_rejects_unknown_strategy(monkeypatch, tmp_path):
     client = TestClient(create_app())
     resp = client.post(
         "/settings",
-        data={"dest": str(tmp_path), "workers": "3", "strategy": "bogus", "cookie_file": ""},
+        data={"dest": str(tmp_path), "workers": "3", "strategy": "bogus", "lang": "de", "cookie_file": ""},
+    )
+
+    assert resp.status_code == 422
+
+
+def test_settings_post_rejects_unknown_lang(monkeypatch, tmp_path):
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_FILE", config_file)
+
+    client = TestClient(create_app())
+    resp = client.post(
+        "/settings",
+        data={"dest": str(tmp_path), "workers": "3", "strategy": "auto", "lang": "fr", "cookie_file": ""},
     )
 
     assert resp.status_code == 422
     assert not config_file.exists()
+
+
+def test_settings_lang_toggle_persists_and_redirects(monkeypatch, tmp_path):
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_FILE", config_file)
+    # The route calls the real i18n.set_lang("en") -- snapshot/restore the
+    # module-global via monkeypatch so this doesn't leak "en" into whichever
+    # test runs next in this process (i18n._lang isn't request-scoped).
+    monkeypatch.setattr(i18n, "_lang", i18n.get_lang())
+
+    client = TestClient(create_app())
+    resp = client.post("/settings/lang", data={"lang": "en"}, headers={"referer": "/library"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/library"
+    reloaded = config.Config.load(path=config_file)
+    assert reloaded.lang == "en"

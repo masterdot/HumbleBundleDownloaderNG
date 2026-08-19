@@ -28,7 +28,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "en": "OK - {count} orders found.",
     },
     "cli.config.unknown_key": {
-        "de": "Unbekannter Schluessel '{key}', erlaubt: {allowed}.",
+        "de": "Unbekannter Schlüssel '{key}', erlaubt: {allowed}.",
         "en": "Unknown key '{key}', allowed: {allowed}.",
     },
     "cli.config.set_saved": {
@@ -56,13 +56,13 @@ CATALOG: dict[str, dict[str, str]] = {
         "en": "{succeeded} verified, {failed} failed/missing.",
     },
     "cli.sync.download_summary": {
-        "de": "{succeeded} heruntergeladen, {skipped} uebersprungen (bereits vorhanden).",
+        "de": "{succeeded} heruntergeladen, {skipped} übersprungen (bereits vorhanden).",
         "en": "{succeeded} downloaded, {skipped} skipped (already present).",
     },
     "cli.sync.circuit_breaker": {
         "de": (
-            "Circuit Breaker ausgeloest: zu viele 403/429-Antworten. Lauf abgebrochen -- "
-            "pruefe, ob der Cookie noch gueltig ist (`hbdl auth check`), bevor du erneut startest."
+            "Circuit Breaker ausgelöst: zu viele 403/429-Antworten. Lauf abgebrochen -- "
+            "prüfe, ob der Cookie noch gültig ist (`hbdl auth check`), bevor du erneut startest."
         ),
         "en": (
             "Circuit breaker tripped: too many 403/429 responses. Run aborted -- check "
@@ -78,7 +78,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "en": "{count} failed:",
     },
     "cli.web.missing_deps": {
-        "de": "Web-Abhaengigkeiten fehlen. Installiere sie mit `pip install hbdl[web]`.",
+        "de": "Web-Abhängigkeiten fehlen. Installiere sie mit `pip install hbdl[web]`.",
         "en": "Web dependencies are missing. Install them with `pip install hbdl[web]`.",
     },
     # Shared across dashboard.html and settings.html.
@@ -102,7 +102,7 @@ CATALOG: dict[str, dict[str, str]] = {
     "error.auth.playwright_missing": {
         "de": (
             "playwright ist nicht installiert. `pip install hbdl[dev]` bzw. "
-            "`playwright install chromium` ausfuehren."
+            "`playwright install chromium` ausführen."
         ),
         "en": "playwright is not installed. Run `pip install hbdl[dev]` or `playwright install chromium`.",
     },
@@ -123,13 +123,13 @@ CATALOG: dict[str, dict[str, str]] = {
     },
     "error.auth.no_login_found": {
         "de": (
-            "Kein Login gefunden. Fuehre `hbdl auth login` aus, oder uebergib "
+            "Kein Login gefunden. Führe `hbdl auth login` aus, oder übergib "
             "--cookie / --cookie-file / setze HBDL_COOKIE."
         ),
         "en": "No login found. Run `hbdl auth login`, or pass --cookie / --cookie-file / set HBDL_COOKIE.",
     },
     "error.auth.cookie_invalid": {
-        "de": "Cookie ungueltig oder abgelaufen -- `hbdl auth login` erneut ausfuehren.",
+        "de": "Cookie ungültig oder abgelaufen -- `hbdl auth login` erneut ausführen.",
         "en": "Cookie invalid or expired -- run `hbdl auth login` again.",
     },
     # library.status.* -- shared by _status_badge.html (deduped out of
@@ -137,7 +137,7 @@ CATALOG: dict[str, dict[str, str]] = {
     # if/elif block each).
     "library.status.downloaded": {"de": "heruntergeladen", "en": "downloaded"},
     "library.status.failed": {"de": "fehlgeschlagen", "en": "failed"},
-    "library.status.running": {"de": "laeuft", "en": "running"},
+    "library.status.running": {"de": "läuft", "en": "running"},
     "library.status.open": {"de": "offen", "en": "open"},
     "library.no_files": {"de": "Keine Dateien.", "en": "No files."},
     "library.no_contents": {"de": "Keine Inhalte.", "en": "No content."},
@@ -152,18 +152,18 @@ CATALOG: dict[str, dict[str, str]] = {
         "en": "Filter: {label} ({count} results)",
     },
     "library.no_bundles_cached": {
-        "de": 'Keine Bundles im Cache -- fuehre `hbdl sync`/`hbdl list` aus oder "Aktualisieren".',
+        "de": 'Keine Bundles im Cache -- führe `hbdl sync`/`hbdl list` aus oder "Aktualisieren".',
         "en": 'No bundles cached yet -- run `hbdl sync`/`hbdl list`, or "Refresh".',
     },
-    "library.back_to_columns": {"de": "Zurueck zur Spaltenansicht", "en": "Back to column view"},
+    "library.back_to_columns": {"de": "Zurück zur Spaltenansicht", "en": "Back to column view"},
     "library.title": {"de": "Bibliothek - hbdl", "en": "Library - hbdl"},
     "library.search_placeholder": {
-        "de": "Suche ueber die gesamte Bibliothek...",
+        "de": "Suche über die gesamte Bibliothek...",
         "en": "Search the entire library...",
     },
     "library.empty_catalog_message": {
         "de": (
-            "Noch kein Katalog-Cache vorhanden. Fuehre <code>hbdl list</code> oder "
+            "Noch kein Katalog-Cache vorhanden. Führe <code>hbdl list</code> oder "
             "<code>hbdl sync</code> (auch mit <code>--dry-run</code>) einmal aus, um die "
             'Bibliothek zu ermitteln -- oder <button class="filter-btn" type="button" '
             'hx-post="/library/refresh" hx-target="#library-main" hx-swap="innerHTML">'
@@ -199,7 +199,7 @@ CATALOG: dict[str, dict[str, str]] = {
     "login.embedded_hint": {
         "de": (
             "Startet einen Browser im Container -- komplett in der GUI, kein "
-            "Terminal noetig. Copy-Paste in das Fenster funktioniert direkt."
+            "Terminal nötig. Copy-Paste in das Fenster funktioniert direkt."
         ),
         "en": (
             "Starts a browser inside the container -- entirely in the GUI, no "
@@ -213,8 +213,8 @@ CATALOG: dict[str, dict[str, str]] = {
     "login.cli_alt_hint": {
         "de": (
             "Falls du lieber ein natives Browserfenster auf diesem Rechner nutzt "
-            "(eigener Passwort-Manager, Authenticator-App): oeffnet ein echtes "
-            "Browserfenster ausserhalb des Containers."
+            "(eigener Passwort-Manager, Authenticator-App): öffnet ein echtes "
+            "Browserfenster außerhalb des Containers."
         ),
         "en": (
             "If you'd rather use a native browser window on this machine (your "
@@ -227,7 +227,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "en": "Then reload this page -- the login is detected automatically.",
     },
     "login.cookie_alt_summary": {
-        "de": "Alternative: Session-Cookie manuell einfuegen",
+        "de": "Alternative: Session-Cookie manuell einfügen",
         "en": "Alternative: paste the session cookie manually",
     },
     "login.cookie_label": {
@@ -239,7 +239,7 @@ CATALOG: dict[str, dict[str, str]] = {
     "login.vnc_starting_hint": {
         "de": (
             "Browser startet im Container -- melde dich im eingebetteten Fenster an "
-            "(inkl. Captcha/2FA falls noetig). Kann ein paar Sekunden dauern, bis das "
+            "(inkl. Captcha/2FA falls nötig). Kann ein paar Sekunden dauern, bis das "
             "Bild erscheint."
         ),
         "en": (
@@ -253,7 +253,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "de": (
             "Melde dich im Fenster oben an. Copy-Paste (Cmd/Strg+V) funktioniert direkt "
             "im Fenster -- klicke zuerst in das Zielfeld (z.B. E-Mail), dann normal "
-            "einfuegen."
+            "einfügen."
         ),
         "en": (
             "Log in via the window above. Copy-paste (Cmd/Ctrl+V) works directly "
@@ -272,6 +272,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "en": "Parallel downloads (workers)",
     },
     "settings.strategy_label": {"de": "Download-Strategie", "en": "Download strategy"},
+    "settings.lang_label": {"de": "Sprache", "en": "Language"},
     "settings.cookie_file_label": {
         "de": "Cookie-Datei (optional, Netscape cookies.txt)",
         "en": "Cookie file (optional, Netscape cookies.txt)",
@@ -279,7 +280,7 @@ CATALOG: dict[str, dict[str, str]] = {
     "settings.save_button": {"de": "Speichern", "en": "Save"},
     "sse.item_error_badge": {"de": "Fehler", "en": "Error"},
     "job.discovering": {"de": "Ermittle Bibliothek...", "en": "Discovering library..."},
-    "job.running": {"de": "Laeuft ({n} Dateien)", "en": "Running ({n} files)"},
+    "job.running": {"de": "Läuft ({n} Dateien)", "en": "Running ({n} files)"},
     "job.paused": {"de": "Pausiert ({n} Dateien)", "en": "Paused ({n} files)"},
     "job.stopped": {"de": "Gestoppt", "en": "Stopped"},
     "job.done": {"de": "Fertig", "en": "Done"},
@@ -298,7 +299,6 @@ CATALOG: dict[str, dict[str, str]] = {
     "dashboard.session_missing_badge": {"de": "kein Login gefunden", "en": "no login found"},
     "dashboard.see_settings_prefix": {"de": "-- siehe", "en": "-- see"},
     "dashboard.sync_job_heading": {"de": "Sync-Job", "en": "Sync job"},
-    "dashboard.progress_label": {"de": "Fortschritt:", "en": "Progress:"},
     "about.title": {"de": "Über & Spenden - hbdl", "en": "About & Donate - hbdl"},
     "about.heading": {"de": "Über hbdl", "en": "About hbdl"},
     "about.origin_heading": {"de": "Entstehungsgeschichte", "en": "Origin story"},
@@ -308,7 +308,7 @@ CATALOG: dict[str, dict[str, str]] = {
             "Download meiner Humble-Bundle-Bibliothek schon lange komfortabler haben -- da "
             "sammelt sich sehr schnell sehr viel an. Durch meine Programmiererfahrung und mit "
             "KI-Unterstützung lässt sich mittlerweile auch als Einzelperson umsetzen, was "
-            "frueher fuer ein Ein-Personen-Projekt zu groß und zu aufwaendig gewesen waere."
+            "früher für ein Ein-Personen-Projekt zu groß und zu aufwändig gewesen wäre."
         ),
         "en": (
             "This project grew out of an old Pascal downloader. I'd wanted a more "
@@ -322,7 +322,7 @@ CATALOG: dict[str, dict[str, str]] = {
     "about.contribute_text": {
         "de": (
             "Fehler gefunden oder eine Funktion vermisst? Bitte im Issue-Tracker auf GitHub "
-            "melden -- Bug-Reports und Feature-Wuensche sind beide willkommen:"
+            "melden -- Bug-Reports und Feature-Wünsche sind beide willkommen:"
         ),
         "en": (
             "Found a bug or missing a feature? Please report it in the GitHub issue "
@@ -336,7 +336,7 @@ CATALOG: dict[str, dict[str, str]] = {
     "about.outlook_intro": {
         "de": (
             "hbdl soll langfristig das zentrale Element einer kleinen, selbstgehosteten "
-            "Medienbibliothek werden -- mit Anbindung an spezialisierte Apps fuer die "
+            "Medienbibliothek werden -- mit Anbindung an spezialisierte Apps für die "
             "jeweiligen Inhalte:"
         ),
         "en": (
@@ -350,11 +350,11 @@ CATALOG: dict[str, dict[str, str]] = {
     "about.outlook_jellyfin": {"de": "(oder ähnlich) für MP3/FLAC", "en": "(or similar) for MP3/FLAC"},
     "about.outlook_games": {
         "de": (
-            "Fuer <strong>Spiele</strong> wird noch nach einer guten Loesung gesucht -- evtl. "
+            "Für <strong>Spiele</strong> wird noch nach einer guten Lösung gesucht -- evtl. "
             '<a href="https://github.com/rommapp/romm" target="_blank" rel="noopener">RomM</a>. '
-            "Gesucht ist im Grunde eine WebGUI, die plattformuebergreifende Spiele "
+            "Gesucht ist im Grunde eine WebGUI, die plattformübergreifende Spiele "
             "(Windows/Linux/macOS/Android) sauber nebeneinander darstellen kann, idealerweise "
-            "mit ordentlich gescrapten Metadaten/Assets. Vorschlaege sind willkommen -- gerne "
+            "mit ordentlich gescrapten Metadaten/Assets. Vorschläge sind willkommen -- gerne "
             "als Issue."
         ),
         "en": (
@@ -367,7 +367,7 @@ CATALOG: dict[str, dict[str, str]] = {
     },
     "about.donate_heading": {"de": "Spenden", "en": "Donate"},
     "about.donate_text": {
-        "de": "Wenn dir hbdl nuetzlich ist, kannst du das Projekt ueber GitHub Sponsors unterstuetzen:",
+        "de": "Wenn dir hbdl nützlich ist, kannst du das Projekt über GitHub Sponsors unterstützen:",
         "en": "If hbdl is useful to you, you can support the project via GitHub Sponsors:",
     },
 }

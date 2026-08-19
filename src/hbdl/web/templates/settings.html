@@ -22,15 +22,15 @@
 
   <form class="settings-form" method="post" action="/settings">
     <div>
-      <label for="dest">{{ t("shared.dest_label") }}</label>
+      <label for="dest">--dest <span class="flag-hint">{{ t("shared.dest_label") }}</span></label>
       <input type="text" id="dest" name="dest" value="{{ dest }}" style="width: 100%">
     </div>
     <div>
-      <label for="workers">{{ t("settings.workers_label") }}</label>
+      <label for="workers">--workers <span class="flag-hint">{{ t("settings.workers_label") }}</span></label>
       <input type="number" id="workers" name="workers" min="1" value="{{ workers }}">
     </div>
     <div>
-      <label for="strategy">{{ t("settings.strategy_label") }}</label>
+      <label for="strategy">--strategy <span class="flag-hint">{{ t("settings.strategy_label") }}</span></label>
       <select id="strategy" name="strategy">
         {% for s in strategies %}
           <option value="{{ s }}" {% if s == strategy %}selected{% endif %}>{{ s }}</option>
@@ -38,8 +38,16 @@
       </select>
     </div>
     <div>
-      <label for="cookie_file">{{ t("settings.cookie_file_label") }}</label>
+      <label for="cookie_file">--cookie-file <span class="flag-hint">{{ t("settings.cookie_file_label") }}</span></label>
       <input type="text" id="cookie_file" name="cookie_file" value="{{ cookie_file }}" style="width: 100%">
+    </div>
+    <div>
+      <label for="lang">--lang <span class="flag-hint">{{ t("settings.lang_label") }}</span></label>
+      <select id="lang" name="lang">
+        {% for l in languages %}
+          <option value="{{ l }}" {% if l == current_lang %}selected{% endif %}>{{ l }}</option>
+        {% endfor %}
+      </select>
     </div>
     <div>
       <button class="primary" type="submit">{{ t("settings.save_button") }}</button>

@@ -11,7 +11,7 @@
 </section>
 {% endif %}
 
-<div style="margin-bottom: 1rem;">
+<div class="search-row" style="margin-bottom: 1rem;">
   <input type="search" name="q" placeholder="{{ t('library.search_placeholder') }}" style="width: 100%; max-width: 480px;"
          hx-get="/library/search" hx-trigger="keyup changed delay:300ms, search" hx-target="#library-main" hx-swap="innerHTML" hx-include="this">
 </div>

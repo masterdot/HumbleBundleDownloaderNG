@@ -15,9 +15,12 @@
        resolves to /vnc/websockify -- see web/routers/vnc_proxy.py's
        websocket route and CONCEPT_WEB.md for how this was verified against
        noVNC's app/ui.js. -->
-  <iframe id="vnc-frame" title="{{ t('login.vnc_iframe_title') }}" allow="clipboard-read; clipboard-write"
-          src="/vnc/hbdl-vnc.html?path=websockify&amp;autoconnect=true&amp;resize=scale"
-          style="width:100%; height:520px; border:1px solid var(--border); border-radius:8px;"></iframe>
+  <div class="window-frame">
+    <div class="window-titlebar"><span class="dots"><span></span><span></span><span></span></span>vnc://hbdl-web:6080</div>
+    <iframe id="vnc-frame" title="{{ t('login.vnc_iframe_title') }}" allow="clipboard-read; clipboard-write"
+            src="/vnc/hbdl-vnc.html?path=websockify&amp;autoconnect=true&amp;resize=scale"
+            style="width:100%; height:520px;"></iframe>
+  </div>
   <p class="hint">
     {{ t("login.vnc_instructions") }}
   </p>
