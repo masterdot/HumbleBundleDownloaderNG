@@ -140,6 +140,8 @@ CATALOG: dict[str, dict[str, str]] = {
     "library.status.running": {"de": "läuft", "en": "running"},
     "library.status.open": {"de": "offen", "en": "open"},
     "library.no_files": {"de": "Keine Dateien.", "en": "No files."},
+    "library.download_button": {"de": "Herunterladen", "en": "Download"},
+    "library.retry_button": {"de": "Erneut versuchen", "en": "Retry"},
     "library.no_contents": {"de": "Keine Inhalte.", "en": "No content."},
     "library.no_results": {"de": "Keine Treffer.", "en": "No results."},
     "library.file_count": {"de": "{n} Dateien", "en": "{n} files"},

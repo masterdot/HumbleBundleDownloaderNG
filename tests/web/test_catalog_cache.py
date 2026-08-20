@@ -111,6 +111,24 @@ def test_list_files_for_subproduct_includes_status_via_left_join(tmp_path):
     assert mac_file.has_torrent is False
 
 
+def test_get_file_returns_single_row_by_identity_key(tmp_path):
+    store = _seeded_store(tmp_path)
+    an_item = _item(gamekey="bundle1", human_name="Cosplay Bundle", subproduct_name="Foam Armor",
+                     platform="ebook", variant_name="PDF", filename="foam.pdf")
+
+    found = store.get_file(an_item.identity_key)
+
+    assert found is not None
+    assert found.filename == "foam.pdf"
+    assert found.gamekey == "bundle1"
+
+
+def test_get_file_returns_none_for_unknown_identity_key(tmp_path):
+    store = _seeded_store(tmp_path)
+
+    assert store.get_file("does-not-exist") is None
+
+
 def test_search_files_matches_human_name_subproduct_and_filename(tmp_path):
     store = _seeded_store(tmp_path)
 

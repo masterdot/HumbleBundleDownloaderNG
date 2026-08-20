@@ -1,0 +1,9 @@
+<span class="file-action" id="file-action-{{ identity_key }}"
+      {% if status == "downloading" %}hx-get="/library/files/status?identity_key={{ identity_key | urlencode }}" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"{% endif %}>
+  {% include "_status_badge.html" %}
+  {% if status == "failed" %}
+    <button class="row-action" type="button" hx-post="/library/files/download" hx-vals='{"identity_key": "{{ identity_key }}"}' hx-target="#file-action-{{ identity_key }}" hx-swap="outerHTML">{{ t("library.retry_button") }}</button>
+  {% elif status != "verified" and status != "downloading" %}
+    <button class="row-action" type="button" hx-post="/library/files/download" hx-vals='{"identity_key": "{{ identity_key }}"}' hx-target="#file-action-{{ identity_key }}" hx-swap="outerHTML">{{ t("library.download_button") }}</button>
+  {% endif %}
+</span>

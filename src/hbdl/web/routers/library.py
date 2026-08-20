@@ -11,12 +11,17 @@ acceptable for a personal library but not the general download job UI.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+import threading
+from datetime import datetime, timezone
 
-from hbdl import auth, i18n
+from fastapi import APIRouter, Depends, Form, Request
+
+from hbdl import auth, config, i18n
 from hbdl.api import Client
-from hbdl.catalog import build_catalog, sync_catalog_cache
-from hbdl.state import BundleSummary, FileRow, StateStore, SubproductSummary
+from hbdl.catalog import build_catalog, refresh_item_url, sync_catalog_cache
+from hbdl.downloader.direct import download_all
+from hbdl.models import DownloadItem
+from hbdl.state import STATUS_FAILED, BundleSummary, FileRow, StateStore, SubproductSummary, open_store
 from hbdl.web.deps import get_store
 
 router = APIRouter(prefix="/library")
@@ -153,3 +158,99 @@ def refresh(request: Request, store: StateStore = Depends(get_store)):
 
     context = {"bundles": _bundle_rows(store.list_bundles())}
     return templates.TemplateResponse(request, "_columns_root.html", context)
+
+
+def _placeholder_item(row: FileRow) -> DownloadItem:
+    """A `DownloadItem` carrying only the identity-defining fields (gamekey +
+    the four other components of `identity_key`) from a cached `FileRow` --
+    just enough for `refresh_item_url` to find the real, current item in a
+    freshly refetched order. Its own url/md5/sha1 are throwaway placeholders,
+    overwritten by whatever `refresh_item_url` returns."""
+    return DownloadItem(
+        gamekey=row.gamekey,
+        human_name=row.human_name,
+        subproduct_name=row.subproduct_name,
+        platform=row.platform,
+        variant_name=row.variant_name,
+        filename=row.filename,
+        url="",
+        url_fetched_at=datetime.fromtimestamp(0, tz=timezone.utc),
+        file_size=row.file_size,
+        md5=None,
+        sha1=None,
+        torrent_url=None,
+    )
+
+
+def _run_single_download(client: Client, row: FileRow) -> None:
+    """Runs in its own background thread (started by download_file() below,
+    outlives the request) -- its own open_store() rather than the
+    request-scoped `get_store` dependency, which FastAPI closes as soon as
+    the request handler returns. Safe to run alongside a JobManager bulk
+    sync: StateStore serializes all access via its own lock (state.py).
+
+    Always forces strategy="direct", ignoring the account's configured bulk-
+    sync strategy: a manual "download this one file now" click means get the
+    actual content now, not (for a torrent-eligible item under strategy
+    auto/torrent) just the small .torrent metadata file -- which is also
+    written under a *different* DB key (`identity_key + "::torrent"`, see
+    downloader/torrent.py), so the button's own status badge would never
+    leave "offen" even though something did technically happen. Found live
+    against a real account file during M17 verification, not a hypothetical."""
+    dest = config.resolve_dest(None)
+    with open_store() as store:
+        try:
+            fresh_item = refresh_item_url(client, _placeholder_item(row))
+        except Exception as exc:  # noqa: BLE001 -- surfaced via the status badge, not swallowed
+            store.upsert(
+                row.identity_key,
+                status=STATUS_FAILED,
+                dest_path=str(_placeholder_item(row).dest_path(dest)),
+                last_attempt_at=datetime.now(timezone.utc).isoformat(),
+                last_error=str(exc),
+            )
+            return
+        dest.mkdir(parents=True, exist_ok=True)
+        download_all(client, [fresh_item], dest, store, workers=1, show_progress=False, strategy="direct")
+
+
+@router.post("/files/download")
+def download_file(request: Request, identity_key: str = Form(...), store: StateStore = Depends(get_store)):
+    """Manual single-file download, triggered from the library browser's
+    per-row button (_file_action.html) -- separate from JobManager's
+    whole-library sync job (web/jobs.py), which is a "one job at a time"
+    singleton this deliberately doesn't touch. See _run_single_download()
+    for why this needs its own StateStore/background thread."""
+    templates = request.app.state.templates
+    row = store.get_file(identity_key)
+    if row is None:
+        return templates.TemplateResponse(request, "_file_action.html", {"identity_key": identity_key, "status": None})
+
+    try:
+        session = auth.resolve_session()
+    except auth.AuthError:
+        # Deliberately no inline error surface here (see the plan/CONCEPT_WEB.md
+        # note) -- just re-render the unchanged current status. The user can
+        # check the login status on the settings page separately.
+        return templates.TemplateResponse(
+            request, "_file_action.html", {"identity_key": identity_key, "status": row.status}
+        )
+
+    client = Client(session)
+    threading.Thread(target=_run_single_download, args=(client, row), daemon=True).start()
+
+    return templates.TemplateResponse(
+        request, "_file_action.html", {"identity_key": identity_key, "status": "downloading"}
+    )
+
+
+@router.get("/files/status")
+def file_status(request: Request, identity_key: str, store: StateStore = Depends(get_store)):
+    """Poll target for _file_action.html's "downloading" state (hx-trigger
+    every 2s) -- re-renders the same fragment from the current DB status;
+    polling stops naturally once the response no longer carries the
+    downloading branch's hx-trigger."""
+    templates = request.app.state.templates
+    record = store.get(identity_key)
+    status = record.status if record else None
+    return templates.TemplateResponse(request, "_file_action.html", {"identity_key": identity_key, "status": status})

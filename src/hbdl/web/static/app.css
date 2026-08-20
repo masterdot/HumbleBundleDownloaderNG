@@ -245,6 +245,18 @@ code {
 .column { flex: 0 0 270px; border-right: 1px solid var(--border); overflow-y: auto; }
 .column:last-child { border-right: none; }
 
+/* #col2-onward/#col3-onward (_columns_root.html/_column_subproduct.html) are
+   the plain <div> targets htmx swaps the next column into. Without display:
+   flex here, a swapped-in .column loses its flex-basis (only applies to a
+   flex child) and renders as a full-width block with the next #colN-onward
+   stacked below it instead of beside it -- this is the fix for that. */
+#col2-onward, #col3-onward { display: flex; min-width: 0; }
+
+/* The file-level (innermost) column: unlike the two narrow navigation
+   columns before it, it carries per-row metadata + an action button, so it
+   grows to fill whatever width is left instead of staying pinned at 270px. */
+.column-wide { flex: 1 1 auto; max-width: none; }
+
 .column .row {
   padding: 0.55rem 0.8rem;
   cursor: pointer;
@@ -261,6 +273,36 @@ code {
 /* .column is reused both for the 3-up Finder browser and the single-column
    flat search/filter results list (_flat_list.html) -- same row treatment
    applies to both, no separate ruleset needed. */
+
+/* File rows (the innermost column + the flat search/filter list): unlike
+   the navigable bundle/subproduct rows above, these aren't clickable and
+   carry a right-aligned status + action instead of just a meta line. */
+.column .row.row-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: default;
+  white-space: normal;
+}
+.row-file:hover { background: transparent; }
+.row-file .file-info { min-width: 0; overflow: hidden; }
+.row-file .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-file .meta { white-space: normal; }
+
+.file-action { display: inline-flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+button.row-action {
+  display: inline-block;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+  font-family: "IBM Plex Mono", monospace;
+  cursor: pointer;
+}
+button.row-action:hover { background: var(--accent); color: var(--bg); }
 
 /* ---- filters & search ---- */
 

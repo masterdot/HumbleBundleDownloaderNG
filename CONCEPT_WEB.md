@@ -56,6 +56,8 @@ built.
   system across all 18 templates + `app.css`, explored as a Claude Design
   canvas first; language switcher (topbar toggle + settings form) actually
   wired up. ✅ done
+- **M17** — Library browser: 3-column flex layout bug fixed, manual
+  single-file download button added per row. ✅ done
 
 ## Decision Log
 
@@ -770,3 +772,98 @@ Calibre-Web, Jellyfin, still-open games solution).
   shell invocations (no job-table entry for that PID in the new shell) --
   `lsof -i :PORT` confirmed the actual bound process before trusting any
   subsequent screenshot.
+
+### 2026-08-20 – M17 done: library browser column-wrap fix + manual per-file download
+
+- **Bug reported by the user after live-testing M16**: selecting a bundle
+  correctly shows subproducts beside it, but selecting a subproduct puts the
+  file list *below* the subproduct column instead of beside it. Reproduced
+  live against the running container with the user's real library data.
+  **Root cause**: `#col2-onward`/`#col3-onward` (`_columns_root.html`/
+  `_column_subproduct.html` -- the plain `<div>`s htmx swaps the next column
+  into) were never `display:flex`. `.column`'s `flex: 0 0 270px` only takes
+  effect on a flex child, so a swapped-in `.column` rendered as a full-width
+  block with the next `#colN-onward` stacked underneath -- pre-existing
+  since M10, just not this visible in the old light theme's narrower rows.
+  Fix: `#col2-onward, #col3-onward { display: flex; min-width: 0; }`.
+- **Second report, same conversation**: no way to download a single file
+  from the library browser -- only the Dashboard's "Start" button (the
+  whole-library `JobManager` sync) triggers any download at all. Confirmed
+  live (clicked Start against the real account, session was valid, job
+  correctly went to `DISCOVERING` -- immediately stopped via
+  `/jobs/current/stop` before anything downloaded, verified no new files).
+  This was a genuine feature gap, not a bug -- built as M17's second half.
+- **Layout, done together with the fix**: the file-level (innermost) column
+  gained a `.column-wide` class (`flex: 1 1 auto; max-width: none`) instead
+  of staying pinned at 270px like the two navigation columns before it --
+  room for a two-sided row (`.row-file`: filename+meta left, status badge +
+  action button right, `justify-content: space-between`) instead of the
+  previous single cramped, ellipsis-truncated line. Applied to both
+  `_column_file.html` and `_flat_list.html` (the search/filter results
+  list, which already had its own ad-hoc wide-column inline style --
+  replaced with the same class for consistency).
+- **New backend for the per-file download**: `StateStore.get_file(identity_key)`
+  (new, reuses the existing `_FILE_ROW_SELECT`/`_row_to_file` machinery).
+  `POST /library/files/download` looks the row up, resolves a session (auth
+  failure: silently re-renders the unchanged current status -- no inline
+  error surface at this granularity, documented as a deliberate scope
+  choice, not a silent bug), builds a placeholder `DownloadItem` from the
+  cached row's identity fields, and starts a `threading.Thread` running
+  `catalog.refresh_item_url()` (the existing "refetch one order, return the
+  matching item with a fresh signed URL" primitive, previously only used
+  internally by `direct.py`'s own TTL-refresh logic) followed by
+  `download_all()` with a single-item list. Responds immediately (doesn't
+  wait for the download) with a "downloading" fragment carrying its own
+  `hx-trigger="every 2s"` poll -- exactly the same self-perpetuating
+  poll-until-terminal pattern already proven for the VNC login status
+  (`_login_status_poll.html`/`_login_status_response.html`), reused rather
+  than inventing a second mechanism. New `GET /library/files/status` is the
+  poll target, just re-rendering the same fragment from the current DB
+  status. **Deliberately does not reuse `JobManager`**: it's a hard "one job
+  at a time" singleton (`web/jobs.py`'s own docstring) -- shoehorning a
+  single-file click through it would block a running bulk sync and vice
+  versa. `StateStore`'s own lock (`state.py`) already makes concurrent
+  access from an independent one-off thread and a `JobManager` bulk-sync
+  thread safe at the DB layer, so no new locking was needed.
+- **Real bug caught during the container-based verification pass, not a
+  hypothetical**: the first live test of the new download button appeared
+  to silently do nothing -- badge went `läuft` (downloading) then back to
+  `offen` (open) a couple seconds later, no error, no traceback anywhere in
+  `docker logs`. Root cause, found by reproducing the call inline inside
+  the container (`docker exec ... python3 -c "..."` calling
+  `_run_single_download` directly): the clicked file had `has_torrent=True`,
+  and the account's configured bulk-sync strategy was `auto` -- so
+  `download_all()`'s existing strategy resolution correctly classified it
+  as a torrent-kind item and routed it through
+  `downloader/torrent.py::download_torrent_file()`, which only fetches the
+  small `.torrent` metadata file (by design, v1 scope, see `CONCEPT.md` §7)
+  -- and, critically, writes its result under a *different* DB key
+  (`identity_key + "::torrent"`, `torrent.py`'s own `torrent_identity_key()`)
+  than the plain `identity_key` the row's status badge queries. So the
+  torrent file genuinely did download successfully, just invisibly to the
+  button that triggered it. Fix: the single-file download route always
+  calls `download_all(..., strategy="direct")`, ignoring the account's
+  configured bulk-sync strategy -- a deliberate, documented divergence: a
+  manual "download this one file now" click means get the actual content
+  now, not a `.torrent` stub under strategy `auto`/`torrent`. Re-verified
+  live after the fix: `läuft` → (~30s for a real 22MB ebook PDF over the
+  network) → `heruntergeladen`, hash-verified, file confirmed on disk
+  matching the DB's recorded size.
+- **Real infrastructure finding surfaced by that same live verification,
+  outside this milestone's scope, flagged to the user rather than
+  silently worked around**: the downloaded file is genuinely present and
+  correctly sized *inside* the container and inside the Colima Linux VM
+  (`colima ssh -- ls ...` at the exact same absolute path,
+  `/Volumes/Ohne Titel/humblebundle/...`, confirms it), but does **not**
+  appear at that same path on the macOS host (`ls`/Finder, even after
+  `sync` + a delay) -- `/Volumes/Ohne Titel` is a real, separately-mounted
+  external HFS+ drive on the host (`mount` confirms `/dev/disk6s1 on
+  /Volumes/Ohne Titel (hfs, ...)`), and it isn't yet established whether
+  Colima's VM-side path of the same name is a genuine passthrough of that
+  real drive or coincidentally-named VM-local storage. Not investigated
+  further here -- reconfiguring how Colima shares host paths is
+  machine-level infrastructure, not a repo change, and needs the user's
+  input before touching it. **Practical implication if unresolved**: files
+  "downloaded" via the Docker container (both this new manual button and
+  the existing bulk `JobManager` sync -- this isn't specific to the new
+  feature) may not actually be landing on the intended external drive.

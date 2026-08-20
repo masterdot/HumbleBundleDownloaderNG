@@ -5,11 +5,14 @@ needs a resolvable auth session)."""
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 
+import responses
 from fastapi.testclient import TestClient
 
 from hbdl import config
+from hbdl.auth import Session
 from hbdl.catalog import sync_catalog_cache
 from hbdl.models import DownloadItem
 from hbdl.state import StateStore
@@ -144,6 +147,54 @@ def test_filter_bar_buttons_reflect_distinct_values(tmp_path, monkeypatch):
     assert "PDF" in resp.text
     assert "windows" in resp.text
     assert "ebook" not in resp.text.split("Spiele/Software")[1].split("</div>")[0] if "Spiele/Software" in resp.text else True
+
+
+def test_download_file_unknown_identity_key_does_not_500(tmp_path, monkeypatch):
+    client = _client_with_seeded_catalog(tmp_path, monkeypatch)
+
+    resp = client.post("/library/files/download", data={"identity_key": "does-not-exist"})
+
+    assert resp.status_code == 200
+
+
+def test_download_file_without_login_leaves_status_unchanged(tmp_path, monkeypatch):
+    client = _client_with_seeded_catalog(tmp_path, monkeypatch)
+    monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "no-such-session.json")
+    monkeypatch.delenv("HBDL_COOKIE", raising=False)
+    monkeypatch.delenv("HBDL_COOKIE_FILE", raising=False)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "no-such-config.toml")
+    an_item = _item()
+
+    resp = client.post("/library/files/download", data={"identity_key": an_item.identity_key})
+
+    assert resp.status_code == 200
+    assert "offen" in resp.text  # still the untouched "open" badge, no crash
+
+
+@responses.activate
+def test_manual_file_download_transitions_to_verified(tmp_path, monkeypatch):
+    client = _client_with_seeded_catalog(tmp_path, monkeypatch)
+    an_item = _item()  # gamekey b1, foam.pdf, seeded above
+
+    monkeypatch.setattr("hbdl.web.routers.library.auth.resolve_session", lambda **_: Session(cookie_value="dummy"))
+    fresh_item = _item(url="https://dl.humble.com/foam-fresh.pdf?ttl=1")
+    monkeypatch.setattr("hbdl.web.routers.library.refresh_item_url", lambda client, item: fresh_item)
+    responses.get("https://dl.humble.com/foam-fresh.pdf", body=b"x" * 1234, status=200)
+
+    resp = client.post("/library/files/download", data={"identity_key": an_item.identity_key})
+    assert resp.status_code == 200
+    assert "läuft" in resp.text
+
+    deadline = time.time() + 5
+    status_text = ""
+    while time.time() < deadline:
+        status_text = client.get("/library/files/status", params={"identity_key": an_item.identity_key}).text
+        if "heruntergeladen" in status_text or "fehlgeschlagen" in status_text:
+            break
+        time.sleep(0.05)
+    time.sleep(0.2)  # small grace period: the background thread's own cleanup after the DB write is near-instant, but not synchronous with the poll response
+
+    assert "heruntergeladen" in status_text
 
 
 def test_refresh_without_login_shows_error_not_500(tmp_path, monkeypatch):

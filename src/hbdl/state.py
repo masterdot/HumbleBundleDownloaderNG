@@ -298,6 +298,13 @@ class StateStore:
             status=row[9],
         )
 
+    def get_file(self, identity_key: str) -> FileRow | None:
+        sql = self._FILE_ROW_SELECT + " WHERE ci.identity_key = ?"
+        with self._db_lock:
+            cur = self._conn.execute(sql, (identity_key,))
+            row = cur.fetchone()
+        return self._row_to_file(row) if row else None
+
     def list_files(self, gamekey: str, subproduct_name: str) -> list[FileRow]:
         sql = (
             self._FILE_ROW_SELECT

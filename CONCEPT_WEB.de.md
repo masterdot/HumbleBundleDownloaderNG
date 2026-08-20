@@ -48,6 +48,8 @@ Implementierungsplan; wird hier bei Bedarf vertieft, sobald einzelne Teile umges
   visuelles System über alle 18 Templates + `app.css`, vorab als
   Claude-Design-Canvas erkundet; Sprachumschaltung (Topbar-Toggle +
   Settings-Formular) tatsächlich verdrahtet. ✅ erledigt
+- **M17** — Bibliotheks-Browser: 3-Spalten-Flex-Layout-Bug behoben,
+  manueller Einzel-Datei-Download-Button pro Zeile ergänzt. ✅ erledigt
 
 ## Entscheidungsprotokoll
 
@@ -714,3 +716,112 @@ Spiele-Loesung).
   vorgefixten Code auslieferte -- `lsof -i :PORT` hat den tatsaechlich
   gebundenen Prozess bestaetigt, bevor irgendeinem weiteren Screenshot
   vertraut wurde.
+
+### 2026-08-20 – M17 abgeschlossen: Bibliotheks-Browser-Umbruch-Fix + manueller Einzel-Datei-Download
+
+- **Vom Nutzer nach dem Live-Test von M16 gemeldeter Bug**: die Auswahl
+  eines Bundles zeigt die Subprodukte korrekt daneben, aber die Auswahl
+  eines Subprodukts stapelt die Dateiliste *unter* die Subprodukt-Spalte
+  statt daneben. Live gegen den laufenden Container mit den echten
+  Bibliotheksdaten des Nutzers reproduziert. **Root Cause**:
+  `#col2-onward`/`#col3-onward` (`_columns_root.html`/
+  `_column_subproduct.html` -- die reinen `<div>`s, in die htmx die
+  jeweils naechste Spalte swapt) waren nie `display:flex`. `.column`s
+  `flex: 0 0 270px` wirkt nur bei einem Flex-Kind, also rendert eine
+  reingeswappte `.column` als volle-Breite-Block mit der naechsten
+  `#colN-onward` darunter gestapelt -- bereits seit M10 vorhanden, im alten
+  hellen Theme mit schmaleren Zeilen nur nicht so auffaellig. Fix:
+  `#col2-onward, #col3-onward { display: flex; min-width: 0; }`.
+- **Zweite Meldung, gleiche Konversation**: keine Moeglichkeit, eine
+  einzelne Datei aus dem Bibliotheks-Browser herunterzuladen -- nur der
+  Dashboard-"Start"-Button (der volle `JobManager`-Bibliotheks-Sync) loest
+  ueberhaupt einen Download aus. Live bestaetigt (Start gegen den echten
+  Account geklickt, Session war gueltig, Job ging korrekt auf
+  `DISCOVERING` -- sofort per `/jobs/current/stop` gestoppt, bevor
+  irgendetwas heruntergeladen wurde, keine neuen Dateien verifiziert). Das
+  war eine echte Funktionslücke, kein Bug -- als zweite Haelfte von M17
+  gebaut.
+- **Layout, zusammen mit dem Fix erledigt**: die Datei-Ebene (innerste
+  Spalte) bekam eine `.column-wide`-Klasse (`flex: 1 1 auto; max-width:
+  none`) statt bei 270px zu bleiben wie die beiden Navigations-Spalten
+  davor -- Platz fuer eine zweiseitige Zeile (`.row-file`: Dateiname+Meta
+  links, Status-Badge + Aktions-Button rechts, `justify-content:
+  space-between`) statt der bisherigen, mit Ellipsis abgeschnittenen
+  einzeiligen Quetschung. Angewendet auf `_column_file.html` und
+  `_flat_list.html` (die Such-/Filter-Trefferliste, die schon einen eigenen
+  Ad-hoc-Breit-Spalten-Inline-Style hatte -- durch dieselbe Klasse ersetzt,
+  fuer Konsistenz).
+- **Neues Backend fuer den Einzel-Datei-Download**:
+  `StateStore.get_file(identity_key)` (neu, nutzt die bestehende
+  `_FILE_ROW_SELECT`/`_row_to_file`-Maschinerie weiter). `POST
+  /library/files/download` sucht die Zeile, loest eine Session auf
+  (Auth-Fehler: rendert stillschweigend den unveraenderten aktuellen
+  Status neu -- keine Inline-Fehlermeldung auf dieser Granularitaet,
+  als bewusste Scope-Entscheidung dokumentiert, kein stiller Bug), baut
+  ein Platzhalter-`DownloadItem` aus den Identitaets-Feldern der
+  gecachten Zeile und startet einen `threading.Thread`, der
+  `catalog.refresh_item_url()` (die bestehende "ein Order neu holen, das
+  passende Item mit frischer signierter URL zurueckgeben"-Primitive,
+  bisher nur intern von `direct.py`s eigener TTL-Refresh-Logik genutzt)
+  gefolgt von `download_all()` mit einer Ein-Item-Liste ausfuehrt.
+  Antwortet sofort (wartet nicht auf den Download) mit einem
+  "läuft"-Fragment, das sein eigenes `hx-trigger="every 2s"`-Polling
+  traegt -- genau dasselbe, bereits fuer den VNC-Login-Status bewaehrte
+  selbst-fortsetzende Poll-bis-terminal-Muster
+  (`_login_status_poll.html`/`_login_status_response.html`),
+  wiederverwendet statt einen zweiten Mechanismus zu erfinden. Neues `GET
+  /library/files/status` ist das Poll-Ziel, rendert einfach dasselbe
+  Fragment aus dem aktuellen DB-Status neu. **Nutzt bewusst nicht
+  `JobManager`**: der ist ein hartes "ein Job gleichzeitig"-Singleton
+  (`web/jobs.py`s eigener Docstring) -- einen Einzel-Datei-Klick da
+  durchzuzwaengen wuerde einen laufenden Bulk-Sync blockieren und
+  umgekehrt. `StateStore`s eigenes Lock (`state.py`) macht gleichzeitigen
+  Zugriff von einem eigenstaendigen One-Off-Thread und einem
+  `JobManager`-Bulk-Sync-Thread auf DB-Ebene bereits sicher, kein neues
+  Locking noetig.
+- **Echter Bug, gefunden waehrend der Container-basierten
+  Verifikation, keine Hypothese**: der erste Live-Test des neuen
+  Download-Buttons schien stillschweigend nichts zu tun -- Badge ging auf
+  `läuft`, dann nach ein paar Sekunden zurueck auf `offen`, kein Fehler,
+  kein Traceback irgendwo in `docker logs`. Root Cause, gefunden durch
+  Reproduktion des Aufrufs direkt im Container (`docker exec ... python3
+  -c "..."`, ruft `_run_single_download` direkt auf): die angeklickte
+  Datei hatte `has_torrent=True`, und die konfigurierte Bulk-Sync-Strategie
+  des Accounts war `auto` -- also klassifizierte `download_all()`s
+  bestehende Strategie-Aufloesung sie korrekt als Torrent-Item und leitete
+  sie durch `downloader/torrent.py::download_torrent_file()` -- das (per
+  Design, v1-Scope, siehe `CONCEPT.md` §7) nur die kleine
+  `.torrent`-Metadatei holt -- und, entscheidend, sein Ergebnis unter
+  einem *anderen* DB-Key schreibt (`identity_key + "::torrent"`,
+  `torrent.py`s eigenes `torrent_identity_key()`) als der einfache
+  `identity_key`, den die Status-Badge der Zeile abfragt. Die Torrent-Datei
+  wurde also tatsaechlich erfolgreich heruntergeladen, nur unsichtbar fuer
+  den Button, der sie ausgeloest hat. Fix: die Einzel-Datei-Download-Route
+  ruft `download_all(..., strategy="direct")` immer fest verdrahtet auf,
+  unabhaengig von der konfigurierten Bulk-Sync-Strategie des Accounts --
+  eine bewusste, dokumentierte Abweichung: ein manueller "diese eine Datei
+  jetzt herunterladen"-Klick bedeutet den echten Inhalt jetzt, keinen
+  `.torrent`-Stub unter Strategie `auto`/`torrent`. Nach dem Fix live
+  erneut verifiziert: `läuft` → (~30s fuer eine echte 22MB-Ebook-PDF ueber
+  das Netz) → `heruntergeladen`, Hash-verifiziert, Datei auf der Platte
+  mit der von der DB erfassten Groesse bestaetigt.
+- **Echter Infrastruktur-Fund, aufgedeckt durch dieselbe Live-Verifikation,
+  ausserhalb des Scopes dieses Meilensteins, dem Nutzer gemeldet statt
+  still umgangen**: die heruntergeladene Datei ist tatsaechlich vorhanden
+  und korrekt groß *innerhalb* des Containers und innerhalb der
+  Colima-Linux-VM (`colima ssh -- ls ...` am exakt selben absoluten Pfad,
+  `/Volumes/Ohne Titel/humblebundle/...`, bestaetigt das), erscheint aber
+  **nicht** am selben Pfad auf dem macOS-Host (`ls`/Finder, auch nach
+  `sync` + Wartezeit) -- `/Volumes/Ohne Titel` ist eine echte, separat
+  gemountete externe HFS+-Platte auf dem Host (`mount` bestaetigt
+  `/dev/disk6s1 on /Volumes/Ohne Titel (hfs, ...)`), und es ist noch nicht
+  geklaert, ob Colimas VM-seitiger Pfad gleichen Namens ein echtes
+  Passthrough dieser realen Platte ist oder zufaellig gleich benannter
+  VM-lokaler Speicher. Hier nicht weiter untersucht -- wie Colima
+  Host-Pfade teilt neu zu konfigurieren ist Maschinen-Infrastruktur, keine
+  Repo-Aenderung, und braucht die Einschaetzung des Nutzers, bevor daran
+  geruehrt wird. **Praktische Implikation, falls ungeloest**: ueber den
+  Docker-Container "heruntergeladene" Dateien (sowohl der neue manuelle
+  Button als auch der bestehende Bulk-`JobManager`-Sync -- das ist nicht
+  spezifisch fuer die neue Funktion) landen moeglicherweise nicht
+  tatsaechlich auf der beabsichtigten externen Platte.

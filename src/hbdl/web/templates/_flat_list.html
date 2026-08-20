@@ -1,16 +1,17 @@
 <div id="columns-root">
   <p class="hint">{{ heading }} &middot; <span class="row" style="display:inline; cursor:pointer; padding:0"
      hx-get="/library/columns/root" hx-target="#library-main" hx-swap="innerHTML">{{ t("library.back_to_columns") }}</span></p>
-  <div class="column" style="flex: 1 1 auto; max-width: none;">
+  <div class="column column-wide">
     {% for f in files %}
-    <div class="row">
-      <strong>{{ f.human_name }}</strong> / {{ f.subproduct_name }} / {{ f.filename }}
-      <div class="meta">
-        {{ f.platform }} &middot; {{ f.variant_name }} &middot; {{ f.size_label }}
-        {% if f.has_torrent %}&middot; Torrent{% endif %}
-        &middot;
-        {% with status = f.status %}{% include "_status_badge.html" %}{% endwith %}
+    <div class="row row-file">
+      <div class="file-info">
+        <div class="file-name"><strong>{{ f.human_name }}</strong> / {{ f.subproduct_name }} / {{ f.filename }}</div>
+        <div class="meta">
+          {{ f.platform }} &middot; {{ f.variant_name }} &middot; {{ f.size_label }}
+          {% if f.has_torrent %}&middot; Torrent{% endif %}
+        </div>
       </div>
+      {% with identity_key = f.identity_key, status = f.status %}{% include "_file_action.html" %}{% endwith %}
     </div>
     {% else %}
     <div class="row hint">{{ t("library.no_results") }}</div>
